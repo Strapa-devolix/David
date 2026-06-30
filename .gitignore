@@ -2,6 +2,7 @@ node_modules/
 .env
 sessions/
 data/chats.json
+data/issues.jsonl
 data/message-log.jsonl
 data/settings.json
 npm-debug.log*

@@ -49,6 +49,11 @@ function defaultProvider() {
   return 'local';
 }
 
+function defaultTranscriptionLanguage() {
+  const language = String(process.env.TRANSCRIPTION_LANGUAGE || '').trim().toLowerCase();
+  return language === 'auto' ? '' : language.slice(0, 8);
+}
+
 function defaultSettings() {
   return {
     botName: process.env.BOT_NAME || 'David',
@@ -66,6 +71,10 @@ function defaultSettings() {
     aiProvider: defaultProvider(),
     groqModel: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
     openaiModel: process.env.OPENAI_MODEL || 'gpt-5.4-mini',
+    transcribeAudio: boolEnv('TRANSCRIBE_AUDIO', true),
+    transcriptionModel: process.env.TRANSCRIPTION_MODEL || 'whisper-large-v3-turbo',
+    transcriptionLanguage: defaultTranscriptionLanguage(),
+    escalationChatId: process.env.ESCALATION_CHAT_ID || '',
   };
 }
 
@@ -96,6 +105,18 @@ function sanitizeSettings(input = {}, base = defaultSettings()) {
   }
   if (Object.hasOwn(input, 'openaiModel')) {
     settings.openaiModel = String(input.openaiModel || 'gpt-5.4-mini').trim() || 'gpt-5.4-mini';
+  }
+  if (Object.hasOwn(input, 'transcribeAudio')) settings.transcribeAudio = Boolean(input.transcribeAudio);
+  if (Object.hasOwn(input, 'transcriptionModel')) {
+    settings.transcriptionModel =
+      String(input.transcriptionModel || 'whisper-large-v3-turbo').trim() || 'whisper-large-v3-turbo';
+  }
+  if (Object.hasOwn(input, 'transcriptionLanguage')) {
+    const language = String(input.transcriptionLanguage || '').trim().toLowerCase();
+    settings.transcriptionLanguage = language === 'auto' ? '' : language.slice(0, 8);
+  }
+  if (Object.hasOwn(input, 'escalationChatId')) {
+    settings.escalationChatId = String(input.escalationChatId || '').trim();
   }
 
   return settings;

@@ -155,6 +155,8 @@ function dashboardPage(token) {
           </label>
           <label>Groq model<input id="groqModel" /></label>
           <label>OpenAI model<input id="openaiModel" /></label>
+          <label>Transcription model<input id="transcriptionModel" /></label>
+          <label>Transcription language<input id="transcriptionLanguage" placeholder="empty/auto, fr, ar..." /></label>
           <label>Max reply characters<input id="maxReplyChars" type="number" min="200" max="4000" /></label>
           <label>Seconds between replies<input id="minSecondsBetweenReplies" type="number" min="0" max="3600" /></label>
         </div>
@@ -162,6 +164,7 @@ function dashboardPage(token) {
           <label class="check"><input id="autoReply" type="checkbox" /> Auto reply</label>
           <label class="check"><input id="onlyGroups" type="checkbox" /> Groups only</label>
           <label class="check"><input id="allowAllChats" type="checkbox" /> Allow all chats</label>
+          <label class="check"><input id="transcribeAudio" type="checkbox" /> Transcribe audio</label>
         </div>
       </section>
 
@@ -170,6 +173,7 @@ function dashboardPage(token) {
         <div class="grid">
           <label>Allowed chat IDs<textarea id="allowedChatIds" placeholder="One chat ID per line"></textarea></label>
           <label>Blocked chat IDs<textarea id="blockedChatIds" placeholder="One chat ID per line"></textarea></label>
+          <label>Issue summary chat ID<input id="escalationChatId" placeholder="Internal group or your private chat ID" /></label>
         </div>
         <div class="actions">
           <button class="secondary" id="refreshChats" type="button">Refresh chats</button>
@@ -191,8 +195,9 @@ function dashboardPage(token) {
       const token = new URLSearchParams(location.search).get('token') || '';
       const ids = [
         'botName', 'ownerName', 'replyTrigger', 'aiProvider', 'groqModel', 'openaiModel',
-        'maxReplyChars', 'minSecondsBetweenReplies', 'autoReply', 'onlyGroups', 'allowAllChats',
-        'allowedChatIds', 'blockedChatIds', 'knowledge'
+        'transcriptionModel', 'transcriptionLanguage', 'maxReplyChars', 'minSecondsBetweenReplies',
+        'autoReply', 'onlyGroups', 'allowAllChats', 'transcribeAudio', 'allowedChatIds',
+        'blockedChatIds', 'escalationChatId', 'knowledge'
       ];
       const el = Object.fromEntries(ids.map(function (id) { return [id, document.getElementById(id)]; }));
       const statusEl = document.getElementById('status');
@@ -223,13 +228,17 @@ function dashboardPage(token) {
         el.aiProvider.value = settings.aiProvider;
         el.groqModel.value = settings.groqModel;
         el.openaiModel.value = settings.openaiModel;
+        el.transcriptionModel.value = settings.transcriptionModel;
+        el.transcriptionLanguage.value = settings.transcriptionLanguage;
         el.maxReplyChars.value = settings.maxReplyChars;
         el.minSecondsBetweenReplies.value = settings.minSecondsBetweenReplies;
         el.autoReply.checked = settings.autoReply;
         el.onlyGroups.checked = settings.onlyGroups;
         el.allowAllChats.checked = settings.allowAllChats;
+        el.transcribeAudio.checked = settings.transcribeAudio;
         el.allowedChatIds.value = settings.allowedChatIds.join('\\n');
         el.blockedChatIds.value = settings.blockedChatIds.join('\\n');
+        el.escalationChatId.value = settings.escalationChatId;
         document.getElementById('secretStatus').textContent =
           'Secrets loaded: ' + secrets.groqKeys + ' Groq key(s), OpenAI ' + (secrets.openai ? 'set' : 'not set');
       }
@@ -258,7 +267,19 @@ function dashboardPage(token) {
             el.allowedChatIds.value = Array.from(current).join('\\n');
             setStatus('Chat added. Save settings to apply it.');
           });
-          row.append(info, button);
+          const notifyButton = document.createElement('button');
+          notifyButton.className = 'secondary';
+          notifyButton.type = 'button';
+          notifyButton.textContent = 'Notify here';
+          notifyButton.addEventListener('click', function () {
+            el.escalationChatId.value = chat.jid;
+            setStatus('Issue summary chat selected. Save settings to apply it.');
+          });
+          const actions = document.createElement('div');
+          actions.className = 'actions';
+          actions.style.marginTop = '0';
+          actions.append(button, notifyButton);
+          row.append(info, actions);
           chatsEl.append(row);
         });
       }
@@ -290,13 +311,17 @@ function dashboardPage(token) {
             aiProvider: el.aiProvider.value,
             groqModel: el.groqModel.value,
             openaiModel: el.openaiModel.value,
+            transcriptionModel: el.transcriptionModel.value,
+            transcriptionLanguage: el.transcriptionLanguage.value,
             maxReplyChars: el.maxReplyChars.value,
             minSecondsBetweenReplies: el.minSecondsBetweenReplies.value,
             autoReply: el.autoReply.checked,
             onlyGroups: el.onlyGroups.checked,
             allowAllChats: el.allowAllChats.checked,
+            transcribeAudio: el.transcribeAudio.checked,
             allowedChatIds: lines(el.allowedChatIds.value),
-            blockedChatIds: lines(el.blockedChatIds.value)
+            blockedChatIds: lines(el.blockedChatIds.value),
+            escalationChatId: el.escalationChatId.value
           })
         });
         await api('/knowledge', {

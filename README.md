@@ -10,6 +10,9 @@ This uses [WhiskeySockets/Baileys](https://github.com/WhiskeySockets/Baileys), w
 - Watches only allowed group/contact IDs.
 - Observes chat IDs without replying until you allowlist them.
 - Replies when a message is a question or mentions the bot.
+- Transcribes WhatsApp voice notes with Groq when audio transcription is enabled.
+- Saves error, bug, and blocker reports as internal issue records.
+- Can forward issue summaries to your private chat or an internal group.
 - Uses Groq or OpenAI for AI replies.
 - Falls back to local answers from `data/knowledge.md` if no AI key is set.
 - Provides a protected dashboard for behavior, allowlists, models, and knowledge.
@@ -61,10 +64,12 @@ Scan the QR with WhatsApp: Settings -> Linked devices -> Link a device.
 
 Behavior settings are stored on the persistent disk in `/var/data/data/settings.json` and edited from `/dashboard?token=ADMIN_TOKEN`.
 Knowledge is stored on the persistent disk in `/var/data/data/knowledge.md` and edited from the dashboard.
+Issues are stored on the persistent disk in `/var/data/data/issues.jsonl`.
 
 ## Safer Operating Mode
 
 Open the dashboard, keep `Allow all chats` off, refresh observed chats, then allow only the team groups where David should answer.
+Set `Issue summary chat ID` to your private chat or internal support group so bug reports are forwarded to you.
 
 ## Notes
 

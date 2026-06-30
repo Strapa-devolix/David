@@ -5,10 +5,12 @@ import P from 'pino';
 import qrcodeTerminal from 'qrcode-terminal';
 import { config } from './config.js';
 import { generateReply } from './ai.js';
+import { formatIssueSummary, looksLikeIssue, saveIssue } from './issues.js';
 import { loadKnowledge } from './knowledge.js';
 import { loadRegistry, rememberChat } from './registry.js';
 import { setConnectionState, setLastError, setQr, startServer } from './server.js';
 import { getSettings, loadSettings } from './settings.js';
+import { hasAudioMessage, transcribeAudioMessage } from './transcription.js';
 import { getMentionedJids, getMessageText, looksLikeQuestion } from './text.js';
 
 const logger = P({ level: process.env.LOG_LEVEL || 'info' });
@@ -48,12 +50,13 @@ function shouldRespondInChat(jid, settings) {
   return settings.allowAllChats || settings.allowedChatIds.includes(jid);
 }
 
-function shouldReply({ text, message, ownJid, settings }) {
+function shouldReply({ text, message, ownJid, settings, issueDetected }) {
   if (!settings.autoReply) return false;
 
   const mentionedJids = getMentionedJids(message);
   const mentioned = mentionedJids.includes(ownJid);
   const question = looksLikeQuestion(text);
+  if (issueDetected) return true;
 
   switch (settings.replyTrigger) {
     case 'all':
@@ -107,7 +110,19 @@ async function handleMessage(sock, message) {
   const settings = await getSettings();
   if (!shouldObserveChat(jid, settings)) return;
 
-  const text = getMessageText(message).trim();
+  let text = getMessageText(message).trim();
+  let audioTranscript = false;
+
+  if (!text && hasAudioMessage(message)) {
+    try {
+      text = (await transcribeAudioMessage({ sock, message, settings, logger })).trim();
+      audioTranscript = Boolean(text);
+    } catch (error) {
+      setLastError(error);
+      logger.error({ err: error, jid }, 'Failed to transcribe audio message');
+    }
+  }
+
   if (!text) return;
 
   const isGroup = isGroupJid(jid);
@@ -122,24 +137,46 @@ async function handleMessage(sock, message) {
   }
 
   const ownJid = jidNormalizedUser(sock.user?.id || '');
-  if (!shouldReply({ text, message, ownJid, settings })) return;
+  const issueDetected = looksLikeIssue(text);
+  if (!shouldReply({ text, message, ownJid, settings, issueDetected })) return;
   if (rateLimited(jid, settings)) {
     logger.info({ jid }, 'Skipping reply because chat is rate limited');
     return;
   }
 
   try {
+    const issue = issueDetected
+      ? await saveIssue({
+          chatJid: jid,
+          chatName,
+          senderName,
+          text,
+          source: audioTranscript ? 'audio' : 'texte',
+        })
+      : null;
+
     await sock.sendPresenceUpdate('composing', jid);
-    const reply = await generateReply({
+    let reply = await generateReply({
       chatName,
       question: text,
       recentContext: historyByChat.get(jid) || [],
       settings,
+      issueDetected,
+      audioTranscript,
     });
+
+    if (issue && !reply.includes(issue.id)) {
+      reply = `${reply}\n\nReference interne: ${issue.id}`;
+    }
 
     if (!reply) return;
     await sock.sendMessage(jid, { text: reply }, { quoted: message });
     lastReplyByChat.set(jid, Date.now());
+
+    if (issue && settings.escalationChatId) {
+      await sock.sendMessage(settings.escalationChatId, { text: formatIssueSummary(issue) });
+    }
+
     logger.info({ jid }, 'Sent reply');
   } catch (error) {
     setLastError(error);

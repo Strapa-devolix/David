@@ -34,7 +34,7 @@ export function looksLikeQuestion(text) {
 
   return (
     normalized.includes('?') ||
-    /^(who|what|when|where|why|how|can|could|do|does|did|is|are|will|should|would|est-ce|quoi|comment|pourquoi|quand|ou)\b/.test(
+    /^(who|what|when|where|why|how|can|could|do|does|did|is|are|will|should|would|est-ce|quoi|comment|pourquoi|quand|ou|wach|chno|kifach|fin|3lach)\b/.test(
       normalized,
     )
   );
