@@ -47,7 +47,7 @@ services:
       - key: BLOCKED_CHAT_IDS
         sync: false
       - key: BOT_NAME
-        value: Davis
+        value: David
       - key: OWNER_NAME
         sync: false
       - key: KNOWLEDGE_PATH

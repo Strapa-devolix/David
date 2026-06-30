@@ -1,6 +1,6 @@
 # David
 
-David is the full project. Davis is the service identity used by the running assistant.
+David is the project and the service identity used by the running assistant.
 
 This uses [WhiskeySockets/Baileys](https://github.com/WhiskeySockets/Baileys), which connects as a WhatsApp Web linked device. It is not the official WhatsApp Business API, so use it gently: allowlist chats, rate-limit replies, and avoid spammy behavior.
 

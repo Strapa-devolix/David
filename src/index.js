@@ -214,6 +214,6 @@ startServer();
 
 connect().catch((error) => {
   setLastError(error);
-  logger.error({ err: error }, 'Failed to start Davis');
+  logger.error({ err: error }, 'Failed to start David');
   process.exitCode = 1;
 });
