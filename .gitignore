@@ -1,0 +1,7 @@
+node_modules/
+.env
+sessions/
+data/chats.json
+data/message-log.jsonl
+npm-debug.log*
+.DS_Store
