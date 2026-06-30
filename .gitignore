@@ -4,6 +4,7 @@ sessions/
 data/chats.json
 data/issues.jsonl
 data/message-log.jsonl
+data/send-state.json
 data/settings.json
 npm-debug.log*
 .DS_Store

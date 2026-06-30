@@ -13,6 +13,7 @@ This uses [WhiskeySockets/Baileys](https://github.com/WhiskeySockets/Baileys), w
 - Transcribes WhatsApp voice notes with Groq when audio transcription is enabled.
 - Saves error, bug, and blocker reports as internal issue records.
 - Can forward issue summaries to your private chat or an internal group.
+- Sends replies through a queue with random delay, hourly/daily caps, and burst cooldown.
 - Uses Groq or OpenAI for AI replies.
 - Falls back to local answers from `data/knowledge.md` if no AI key is set.
 - Provides a protected dashboard for behavior, allowlists, models, and knowledge.
@@ -70,6 +71,7 @@ Issues are stored on the persistent disk in `/var/data/data/issues.jsonl`.
 
 Open the dashboard, keep `Allow all chats` off, refresh observed chats, then allow only the team groups where David should answer.
 Set `Issue summary chat ID` to your private chat or internal support group so bug reports are forwarded to you.
+After a restriction warning, use conservative safety settings: `Reply trigger` = `mention_only`, `Reply delay` = 60-180 seconds, `Hourly reply limit` = 10, and `Daily reply limit` = 40.
 
 ## Notes
 

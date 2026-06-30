@@ -75,6 +75,14 @@ function defaultSettings() {
     transcriptionModel: process.env.TRANSCRIPTION_MODEL || 'whisper-large-v3-turbo',
     transcriptionLanguage: defaultTranscriptionLanguage(),
     escalationChatId: process.env.ESCALATION_CHAT_ID || '',
+    safeSendMode: boolEnv('SAFE_SEND_MODE', true),
+    replyDelayMinSeconds: intEnv('REPLY_DELAY_MIN_SECONDS', 25),
+    replyDelayMaxSeconds: intEnv('REPLY_DELAY_MAX_SECONDS', 90),
+    burstSize: intEnv('BURST_SIZE', 5),
+    burstCooldownMinSeconds: intEnv('BURST_COOLDOWN_MIN_SECONDS', 300),
+    burstCooldownMaxSeconds: intEnv('BURST_COOLDOWN_MAX_SECONDS', 600),
+    hourlyReplyLimit: intEnv('HOURLY_REPLY_LIMIT', 20),
+    dailyReplyLimit: intEnv('DAILY_REPLY_LIMIT', 80),
   };
 }
 
@@ -117,6 +125,32 @@ function sanitizeSettings(input = {}, base = defaultSettings()) {
   }
   if (Object.hasOwn(input, 'escalationChatId')) {
     settings.escalationChatId = String(input.escalationChatId || '').trim();
+  }
+  if (Object.hasOwn(input, 'safeSendMode')) settings.safeSendMode = Boolean(input.safeSendMode);
+  if (Object.hasOwn(input, 'replyDelayMinSeconds')) {
+    settings.replyDelayMinSeconds = clampNumber(input.replyDelayMinSeconds, 25, 0, 3600);
+  }
+  if (Object.hasOwn(input, 'replyDelayMaxSeconds')) {
+    settings.replyDelayMaxSeconds = clampNumber(input.replyDelayMaxSeconds, 90, 0, 7200);
+  }
+  if (settings.replyDelayMaxSeconds < settings.replyDelayMinSeconds) {
+    settings.replyDelayMaxSeconds = settings.replyDelayMinSeconds;
+  }
+  if (Object.hasOwn(input, 'burstSize')) settings.burstSize = clampNumber(input.burstSize, 5, 0, 100);
+  if (Object.hasOwn(input, 'burstCooldownMinSeconds')) {
+    settings.burstCooldownMinSeconds = clampNumber(input.burstCooldownMinSeconds, 300, 0, 7200);
+  }
+  if (Object.hasOwn(input, 'burstCooldownMaxSeconds')) {
+    settings.burstCooldownMaxSeconds = clampNumber(input.burstCooldownMaxSeconds, 600, 0, 14400);
+  }
+  if (settings.burstCooldownMaxSeconds < settings.burstCooldownMinSeconds) {
+    settings.burstCooldownMaxSeconds = settings.burstCooldownMinSeconds;
+  }
+  if (Object.hasOwn(input, 'hourlyReplyLimit')) {
+    settings.hourlyReplyLimit = clampNumber(input.hourlyReplyLimit, 20, 0, 1000);
+  }
+  if (Object.hasOwn(input, 'dailyReplyLimit')) {
+    settings.dailyReplyLimit = clampNumber(input.dailyReplyLimit, 80, 0, 10000);
   }
 
   return settings;

@@ -8,6 +8,7 @@ import { generateReply } from './ai.js';
 import { formatIssueSummary, looksLikeIssue, saveIssue } from './issues.js';
 import { loadKnowledge } from './knowledge.js';
 import { loadRegistry, rememberChat } from './registry.js';
+import { enqueueSend } from './send-queue.js';
 import { setConnectionState, setLastError, setQr, startServer } from './server.js';
 import { getSettings, loadSettings } from './settings.js';
 import { hasAudioMessage, transcribeAudioMessage } from './transcription.js';
@@ -170,11 +171,17 @@ async function handleMessage(sock, message) {
     }
 
     if (!reply) return;
-    await sock.sendMessage(jid, { text: reply }, { quoted: message });
+    await enqueueSend({ sock, jid, content: { text: reply }, options: { quoted: message }, settings, logger });
     lastReplyByChat.set(jid, Date.now());
 
     if (issue && settings.escalationChatId) {
-      await sock.sendMessage(settings.escalationChatId, { text: formatIssueSummary(issue) });
+      await enqueueSend({
+        sock,
+        jid: settings.escalationChatId,
+        content: { text: formatIssueSummary(issue) },
+        settings,
+        logger,
+      });
     }
 
     logger.info({ jid }, 'Sent reply');

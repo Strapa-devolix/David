@@ -159,12 +159,20 @@ function dashboardPage(token) {
           <label>Transcription language<input id="transcriptionLanguage" placeholder="empty/auto, fr, ar..." /></label>
           <label>Max reply characters<input id="maxReplyChars" type="number" min="200" max="4000" /></label>
           <label>Seconds between replies<input id="minSecondsBetweenReplies" type="number" min="0" max="3600" /></label>
+          <label>Reply delay min seconds<input id="replyDelayMinSeconds" type="number" min="0" max="3600" /></label>
+          <label>Reply delay max seconds<input id="replyDelayMaxSeconds" type="number" min="0" max="7200" /></label>
+          <label>Burst size<input id="burstSize" type="number" min="0" max="100" /></label>
+          <label>Burst cooldown min seconds<input id="burstCooldownMinSeconds" type="number" min="0" max="7200" /></label>
+          <label>Burst cooldown max seconds<input id="burstCooldownMaxSeconds" type="number" min="0" max="14400" /></label>
+          <label>Hourly reply limit<input id="hourlyReplyLimit" type="number" min="0" max="1000" /></label>
+          <label>Daily reply limit<input id="dailyReplyLimit" type="number" min="0" max="10000" /></label>
         </div>
         <div class="checks" style="margin-top: 16px;">
           <label class="check"><input id="autoReply" type="checkbox" /> Auto reply</label>
           <label class="check"><input id="onlyGroups" type="checkbox" /> Groups only</label>
           <label class="check"><input id="allowAllChats" type="checkbox" /> Allow all chats</label>
           <label class="check"><input id="transcribeAudio" type="checkbox" /> Transcribe audio</label>
+          <label class="check"><input id="safeSendMode" type="checkbox" /> Safe send queue</label>
         </div>
       </section>
 
@@ -196,8 +204,10 @@ function dashboardPage(token) {
       const ids = [
         'botName', 'ownerName', 'replyTrigger', 'aiProvider', 'groqModel', 'openaiModel',
         'transcriptionModel', 'transcriptionLanguage', 'maxReplyChars', 'minSecondsBetweenReplies',
-        'autoReply', 'onlyGroups', 'allowAllChats', 'transcribeAudio', 'allowedChatIds',
-        'blockedChatIds', 'escalationChatId', 'knowledge'
+        'replyDelayMinSeconds', 'replyDelayMaxSeconds', 'burstSize', 'burstCooldownMinSeconds',
+        'burstCooldownMaxSeconds', 'hourlyReplyLimit', 'dailyReplyLimit', 'autoReply', 'onlyGroups',
+        'allowAllChats', 'transcribeAudio', 'safeSendMode', 'allowedChatIds', 'blockedChatIds',
+        'escalationChatId', 'knowledge'
       ];
       const el = Object.fromEntries(ids.map(function (id) { return [id, document.getElementById(id)]; }));
       const statusEl = document.getElementById('status');
@@ -232,10 +242,18 @@ function dashboardPage(token) {
         el.transcriptionLanguage.value = settings.transcriptionLanguage;
         el.maxReplyChars.value = settings.maxReplyChars;
         el.minSecondsBetweenReplies.value = settings.minSecondsBetweenReplies;
+        el.replyDelayMinSeconds.value = settings.replyDelayMinSeconds;
+        el.replyDelayMaxSeconds.value = settings.replyDelayMaxSeconds;
+        el.burstSize.value = settings.burstSize;
+        el.burstCooldownMinSeconds.value = settings.burstCooldownMinSeconds;
+        el.burstCooldownMaxSeconds.value = settings.burstCooldownMaxSeconds;
+        el.hourlyReplyLimit.value = settings.hourlyReplyLimit;
+        el.dailyReplyLimit.value = settings.dailyReplyLimit;
         el.autoReply.checked = settings.autoReply;
         el.onlyGroups.checked = settings.onlyGroups;
         el.allowAllChats.checked = settings.allowAllChats;
         el.transcribeAudio.checked = settings.transcribeAudio;
+        el.safeSendMode.checked = settings.safeSendMode;
         el.allowedChatIds.value = settings.allowedChatIds.join('\\n');
         el.blockedChatIds.value = settings.blockedChatIds.join('\\n');
         el.escalationChatId.value = settings.escalationChatId;
@@ -315,10 +333,18 @@ function dashboardPage(token) {
             transcriptionLanguage: el.transcriptionLanguage.value,
             maxReplyChars: el.maxReplyChars.value,
             minSecondsBetweenReplies: el.minSecondsBetweenReplies.value,
+            replyDelayMinSeconds: el.replyDelayMinSeconds.value,
+            replyDelayMaxSeconds: el.replyDelayMaxSeconds.value,
+            burstSize: el.burstSize.value,
+            burstCooldownMinSeconds: el.burstCooldownMinSeconds.value,
+            burstCooldownMaxSeconds: el.burstCooldownMaxSeconds.value,
+            hourlyReplyLimit: el.hourlyReplyLimit.value,
+            dailyReplyLimit: el.dailyReplyLimit.value,
             autoReply: el.autoReply.checked,
             onlyGroups: el.onlyGroups.checked,
             allowAllChats: el.allowAllChats.checked,
             transcribeAudio: el.transcribeAudio.checked,
+            safeSendMode: el.safeSendMode.checked,
             allowedChatIds: lines(el.allowedChatIds.value),
             blockedChatIds: lines(el.blockedChatIds.value),
             escalationChatId: el.escalationChatId.value
