@@ -5,6 +5,12 @@ import { config } from './config.js';
 let cachedKnowledge = '';
 let cachedSections = [];
 let lastLoadedAt = 0;
+const bundledKnowledgePath = path.resolve('data', 'knowledge.md');
+const defaultKnowledge = `# Platform Knowledge
+
+Add answers about your platform and apps here.
+Keep answers short, factual, and safe to send to teammates.
+`;
 
 function sectionize(markdown) {
   const sections = [];
@@ -37,6 +43,7 @@ export async function loadKnowledge({ force = false } = {}) {
     const absolutePath = path.isAbsolute(config.knowledgePath)
       ? config.knowledgePath
       : path.resolve(config.knowledgePath);
+    await ensureKnowledgeFile(absolutePath);
     cachedKnowledge = await fs.readFile(absolutePath, 'utf8');
   } catch (error) {
     cachedKnowledge = '';
@@ -45,6 +52,38 @@ export async function loadKnowledge({ force = false } = {}) {
   cachedSections = sectionize(cachedKnowledge);
   lastLoadedAt = Date.now();
   return { markdown: cachedKnowledge, sections: cachedSections };
+}
+
+async function ensureKnowledgeFile(absolutePath) {
+  try {
+    await fs.access(absolutePath);
+    return;
+  } catch {
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+  }
+
+  try {
+    if (path.resolve(absolutePath) !== bundledKnowledgePath) {
+      const bundled = await fs.readFile(bundledKnowledgePath, 'utf8');
+      await fs.writeFile(absolutePath, bundled);
+      return;
+    }
+  } catch {
+    // Fall through to the default starter knowledge.
+  }
+
+  await fs.writeFile(absolutePath, defaultKnowledge);
+}
+
+export async function saveKnowledge(markdown) {
+  const absolutePath = path.isAbsolute(config.knowledgePath)
+    ? config.knowledgePath
+    : path.resolve(config.knowledgePath);
+  await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+  await fs.writeFile(absolutePath, String(markdown || ''));
+  cachedKnowledge = '';
+  lastLoadedAt = 0;
+  return loadKnowledge({ force: true });
 }
 
 function tokenize(text) {

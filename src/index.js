@@ -8,6 +8,7 @@ import { generateReply } from './ai.js';
 import { loadKnowledge } from './knowledge.js';
 import { loadRegistry, rememberChat } from './registry.js';
 import { setConnectionState, setLastError, setQr, startServer } from './server.js';
+import { getSettings, loadSettings } from './settings.js';
 import { getMentionedJids, getMessageText, looksLikeQuestion } from './text.js';
 
 const logger = P({ level: process.env.LOG_LEVEL || 'info' });
@@ -37,24 +38,24 @@ function isGroupJid(jid) {
   return jid.endsWith('@g.us');
 }
 
-function shouldObserveChat(jid) {
-  if (config.blockedChatIds.has(jid)) return false;
-  if (config.onlyGroups && !isGroupJid(jid)) return false;
+function shouldObserveChat(jid, settings) {
+  if (settings.blockedChatIds.includes(jid)) return false;
+  if (settings.onlyGroups && !isGroupJid(jid)) return false;
   return true;
 }
 
-function shouldRespondInChat(jid) {
-  return config.allowAllChats || config.allowedChatIds.has(jid);
+function shouldRespondInChat(jid, settings) {
+  return settings.allowAllChats || settings.allowedChatIds.includes(jid);
 }
 
-function shouldReply({ text, message, ownJid }) {
-  if (!config.autoReply) return false;
+function shouldReply({ text, message, ownJid, settings }) {
+  if (!settings.autoReply) return false;
 
   const mentionedJids = getMentionedJids(message);
   const mentioned = mentionedJids.includes(ownJid);
   const question = looksLikeQuestion(text);
 
-  switch (config.replyTrigger) {
+  switch (settings.replyTrigger) {
     case 'all':
       return true;
     case 'mention_only':
@@ -73,10 +74,10 @@ function rememberMessage(jid, senderName, text) {
   historyByChat.set(jid, existing.slice(-8));
 }
 
-function rateLimited(jid) {
+function rateLimited(jid, settings) {
   const last = lastReplyByChat.get(jid) || 0;
   const elapsedSeconds = (Date.now() - last) / 1000;
-  return elapsedSeconds < config.minSecondsBetweenReplies;
+  return elapsedSeconds < settings.minSecondsBetweenReplies;
 }
 
 async function getChatName(sock, jid, fallback) {
@@ -103,7 +104,8 @@ async function ensureDirectories() {
 async function handleMessage(sock, message) {
   const jid = message.key.remoteJid;
   if (!jid || message.key.fromMe) return;
-  if (!shouldObserveChat(jid)) return;
+  const settings = await getSettings();
+  if (!shouldObserveChat(jid, settings)) return;
 
   const text = getMessageText(message).trim();
   if (!text) return;
@@ -114,14 +116,14 @@ async function handleMessage(sock, message) {
   await rememberChat({ jid, name: chatName, type: isGroup ? 'group' : 'direct' });
   rememberMessage(jid, senderName, text);
 
-  if (!shouldRespondInChat(jid)) {
-    logger.info({ jid, chatName }, 'Observed chat. Add it to ALLOWED_CHAT_IDS to enable replies.');
+  if (!shouldRespondInChat(jid, settings)) {
+    logger.info({ jid, chatName }, 'Observed chat. Allow it from the dashboard to enable replies.');
     return;
   }
 
   const ownJid = jidNormalizedUser(sock.user?.id || '');
-  if (!shouldReply({ text, message, ownJid })) return;
-  if (rateLimited(jid)) {
+  if (!shouldReply({ text, message, ownJid, settings })) return;
+  if (rateLimited(jid, settings)) {
     logger.info({ jid }, 'Skipping reply because chat is rate limited');
     return;
   }
@@ -132,6 +134,7 @@ async function handleMessage(sock, message) {
       chatName,
       question: text,
       recentContext: historyByChat.get(jid) || [],
+      settings,
     });
 
     if (!reply) return;
@@ -148,6 +151,7 @@ async function handleMessage(sock, message) {
 
 async function connect() {
   await ensureDirectories();
+  await loadSettings({ force: true });
   await loadRegistry();
   await loadKnowledge({ force: true });
 

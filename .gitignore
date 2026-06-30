@@ -3,5 +3,6 @@ node_modules/
 sessions/
 data/chats.json
 data/message-log.jsonl
+data/settings.json
 npm-debug.log*
 .DS_Store

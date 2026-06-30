@@ -12,43 +12,11 @@ services:
       mountPath: /var/data
       sizeGB: 1
     envVars:
-      - key: NODE_VERSION
-        value: 24.14.1
-      - key: PORT
-        value: 3000
-      - key: SESSION_DIR
-        value: /var/data/session
-      - key: DATA_DIR
-        value: /var/data/data
       - key: ADMIN_TOKEN
         sync: false
       - key: OPENAI_API_KEY
         sync: false
-      - key: OPENAI_MODEL
-        value: gpt-5.4-mini
-      - key: AI_PROVIDER
-        value: groq
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_API_KEYS
         sync: false
-      - key: GROQ_MODEL
-        value: llama-3.1-8b-instant
-      - key: AUTO_REPLY
-        value: true
-      - key: REPLY_TRIGGER
-        value: question_or_mention
-      - key: ONLY_GROUPS
-        value: true
-      - key: ALLOW_ALL_CHATS
-        value: false
-      - key: ALLOWED_CHAT_IDS
-        sync: false
-      - key: BLOCKED_CHAT_IDS
-        sync: false
-      - key: BOT_NAME
-        value: David
-      - key: OWNER_NAME
-        sync: false
-      - key: KNOWLEDGE_PATH
-        value: data/knowledge.md
