@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: whatsapp-agent
+    name: david
     runtime: node
     plan: starter
     region: frankfurt
@@ -8,12 +8,12 @@ services:
     startCommand: npm start
     healthCheckPath: /health
     disk:
-      name: whatsapp-agent-data
+      name: david-data
       mountPath: /var/data
       sizeGB: 1
     envVars:
       - key: NODE_VERSION
-        value: 20
+        value: 24.14.1
       - key: PORT
         value: 3000
       - key: SESSION_DIR
@@ -47,7 +47,7 @@ services:
       - key: BLOCKED_CHAT_IDS
         sync: false
       - key: BOT_NAME
-        value: Dev Assistant
+        value: Davis
       - key: OWNER_NAME
         sync: false
       - key: KNOWLEDGE_PATH

@@ -1,12 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import makeWASocket, {
-  Browsers,
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-  jidNormalizedUser,
-  useMultiFileAuthState,
-} from '@whiskeysockets/baileys';
+import * as baileysModule from '@whiskeysockets/baileys';
 import P from 'pino';
 import qrcodeTerminal from 'qrcode-terminal';
 import { config } from './config.js';
@@ -20,6 +14,24 @@ const logger = P({ level: process.env.LOG_LEVEL || 'info' });
 const historyByChat = new Map();
 const lastReplyByChat = new Map();
 const groupNameByJid = new Map();
+const baileysDefault =
+  baileysModule.default && typeof baileysModule.default === 'object' ? baileysModule.default : {};
+const makeWASocket =
+  (typeof baileysModule.default === 'function' && baileysModule.default) ||
+  baileysModule.makeWASocket ||
+  baileysDefault.makeWASocket ||
+  baileysDefault.default;
+const Browsers = baileysModule.Browsers || baileysDefault.Browsers;
+const DisconnectReason = baileysModule.DisconnectReason || baileysDefault.DisconnectReason;
+const fetchLatestBaileysVersion =
+  baileysModule.fetchLatestBaileysVersion || baileysDefault.fetchLatestBaileysVersion;
+const jidNormalizedUser = baileysModule.jidNormalizedUser || baileysDefault.jidNormalizedUser;
+const useMultiFileAuthState =
+  baileysModule.useMultiFileAuthState || baileysDefault.useMultiFileAuthState;
+
+if (typeof makeWASocket !== 'function') {
+  throw new Error('Baileys socket factory was not found. Check the installed @whiskeysockets/baileys version.');
+}
 
 function isGroupJid(jid) {
   return jid.endsWith('@g.us');
@@ -202,6 +214,6 @@ startServer();
 
 connect().catch((error) => {
   setLastError(error);
-  logger.error({ err: error }, 'Failed to start WhatsApp agent');
+  logger.error({ err: error }, 'Failed to start Davis');
   process.exitCode = 1;
 });

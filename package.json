@@ -1,7 +1,9 @@
 {
-  "name": "whatsapp-agent",
+  "name": "david",
   "version": "0.1.0",
-  "description": "Personal WhatsApp automation agent using Baileys, an allowlist, and optional OpenAI replies.",
+  "description": "David project service using Baileys, an allowlist, and optional AI replies.",
+  "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
@@ -9,10 +11,10 @@
     "check": "node --check src/index.js && node --check src/config.js && node --check src/ai.js && node --check src/knowledge.js && node --check src/registry.js && node --check src/server.js && node --check src/text.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24.0.0 <25.0.0"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.18",
+    "@whiskeysockets/baileys": "6.7.22",
     "dotenv": "^16.4.7",
     "pino": "^9.6.0",
     "qrcode": "^1.5.4",

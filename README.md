@@ -1,6 +1,6 @@
-# WhatsApp Agent
+# David
 
-Personal WhatsApp automation for your dev-team questions.
+David is the full project. Davis is the service identity used by the running assistant.
 
 This uses [WhiskeySockets/Baileys](https://github.com/WhiskeySockets/Baileys), which connects as a WhatsApp Web linked device. It is not the official WhatsApp Business API, so use it gently: allowlist chats, rate-limit replies, and avoid spammy behavior.
 
@@ -39,6 +39,7 @@ Scan the QR with WhatsApp: Settings -> Linked devices -> Link a device.
 2. Create a Render Blueprint from `render.yaml`, or create a paid Node web service manually.
 3. Keep the persistent disk mounted at `/var/data`.
 4. Set these environment variables:
+   - `NODE_VERSION`: `24.14.1`
    - `ADMIN_TOKEN`: long random secret
    - `OWNER_NAME`: your name
    - `AI_PROVIDER`: `groq`

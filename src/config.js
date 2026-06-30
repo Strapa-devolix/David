@@ -53,7 +53,7 @@ export const config = {
   sessionDir: process.env.SESSION_DIR || path.resolve('sessions'),
   dataDir: process.env.DATA_DIR || path.resolve('data'),
   knowledgePath: process.env.KNOWLEDGE_PATH || path.resolve('data', 'knowledge.md'),
-  botName: process.env.BOT_NAME || 'Dev Assistant',
+  botName: process.env.BOT_NAME || 'Davis',
   ownerName: process.env.OWNER_NAME || 'me',
   autoReply: boolEnv('AUTO_REPLY', true),
   onlyGroups: boolEnv('ONLY_GROUPS', true),

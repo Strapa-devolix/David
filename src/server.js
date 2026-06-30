@@ -39,7 +39,7 @@ function isAuthorized(url) {
 async function sendQrPage(res) {
   if (!currentQr) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end('<h1>WhatsApp Agent</h1><p>No QR is pending. The bot may already be connected.</p>');
+    res.end('<h1>Davis</h1><p>No QR is pending. The service may already be connected.</p>');
     return;
   }
 
@@ -47,7 +47,7 @@ async function sendQrPage(res) {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(`<!doctype html>
 <html>
-  <head><title>WhatsApp Agent QR</title></head>
+  <head><title>Davis QR</title></head>
   <body style="font-family: system-ui, sans-serif; margin: 40px;">
     <h1>Scan with WhatsApp Linked Devices</h1>
     <p>Open WhatsApp on your phone, go to Linked devices, and scan this QR.</p>
@@ -64,7 +64,7 @@ export function startServer() {
       if (url.pathname === '/' || url.pathname === '/health') {
         sendJson(res, 200, {
           ok: true,
-          service: 'whatsapp-agent',
+          service: 'davis',
           connectionState,
           uptimeSeconds: Math.round((Date.now() - startedAt.getTime()) / 1000),
           lastError,
