@@ -68,22 +68,124 @@ async function readJson(req) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-async function sendQrPage(res) {
-  if (!currentQr) {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end('<h1>David</h1><p>No QR is pending. The service may already be connected.</p>');
-    return;
-  }
+async function getQrImage() {
+  if (!currentQr) return '';
+  return qrcode.toDataURL(currentQr, {
+    errorCorrectionLevel: 'M',
+    margin: 2,
+    width: 356,
+    color: {
+      dark: '#123b3b',
+      light: '#ffffff',
+    },
+  });
+}
 
-  const image = await qrcode.toDataURL(currentQr, { margin: 1, width: 320 });
+async function sendQrData(res) {
+  sendJson(res, 200, {
+    ok: true,
+    service: 'david',
+    connectionState,
+    hasQr: Boolean(currentQr),
+    image: await getQrImage(),
+    lastError,
+  });
+}
+
+async function sendQrPage(res, token) {
+  const safeToken = escapeHtml(encodeURIComponent(token));
+  const tokenJson = JSON.stringify(token).replaceAll('<', '\\u003c');
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
   res.end(`<!doctype html>
 <html>
-  <head><title>David QR</title></head>
-  <body style="font-family: system-ui, sans-serif; margin: 40px;">
-    <h1>Scan with WhatsApp Linked Devices</h1>
-    <p>Open WhatsApp on your phone, go to Linked devices, and scan this QR.</p>
-    <img alt="WhatsApp login QR" src="${image}" />
+  <head>
+    <title>David QR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root { color-scheme: dark; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      body { margin: 0; min-height: 100vh; background: #1c1f1f; color: #f7f8f8; display: grid; place-items: center; }
+      main { width: min(960px, calc(100vw - 32px)); background: #111414; border: 1px solid #2b3030; border-radius: 14px; padding: 28px; box-sizing: border-box; }
+      .back { color: #b8c0c0; text-decoration: none; font-size: 28px; line-height: 1; }
+      .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 42px; align-items: center; padding: 26px 78px 18px; }
+      h1 { margin: 0 0 30px; font-size: 30px; font-weight: 500; letter-spacing: 0; }
+      ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 22px; }
+      li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 14px; align-items: start; font-size: 17px; line-height: 1.35; }
+      .step { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #f7f8f8; color: #111414; font-size: 13px; font-weight: 700; margin-top: 1px; }
+      .help { display: inline-flex; color: #23d366; text-decoration: underline; text-underline-offset: 4px; margin-top: 22px; font-weight: 600; }
+      .qrWrap { display: grid; justify-items: center; gap: 18px; }
+      .qrFrame { width: 286px; height: 286px; border-radius: 8px; background: #ffffff; border: 6px solid #ffffff; display: grid; place-items: center; box-sizing: border-box; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); }
+      .qrFrame img { width: 100%; height: 100%; display: block; image-rendering: pixelated; border-radius: 3px; }
+      .qrEmpty { color: #d0d5d5; text-align: center; padding: 24px; font-size: 15px; line-height: 1.45; }
+      .status { min-height: 20px; color: #9ba5a5; font-size: 14px; text-align: center; }
+      .phone { color: #23d366; text-decoration: none; font-weight: 600; }
+      .actions { display: flex; justify-content: center; gap: 12px; margin-top: 24px; }
+      .button { border: 1px solid #354040; color: #f7f8f8; background: transparent; border-radius: 6px; padding: 9px 12px; text-decoration: none; font-size: 14px; }
+      @media (max-width: 820px) {
+        body { place-items: start center; }
+        main { border-radius: 0; border-left: 0; border-right: 0; width: 100%; min-height: 100vh; }
+        .layout { grid-template-columns: 1fr; padding: 22px 4px; gap: 30px; }
+        h1 { font-size: 26px; }
+        .qrFrame { width: min(286px, calc(100vw - 72px)); height: min(286px, calc(100vw - 72px)); }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="/dashboard?token=${safeToken}" aria-label="Back to dashboard">&lt;</a>
+      <div class="layout">
+        <section>
+          <h1>Link David to WhatsApp</h1>
+          <ol>
+            <li><span class="step">1</span><span>Open WhatsApp on your phone.</span></li>
+            <li><span class="step">2</span><span>Go to Settings, then Linked devices.</span></li>
+            <li><span class="step">3</span><span>Tap Link a device and scan this QR code.</span></li>
+          </ol>
+          <a class="help" href="/health">Check connection status</a>
+        </section>
+        <section class="qrWrap">
+          <div class="qrFrame" id="qrFrame">
+            <div class="qrEmpty">Waiting for a QR code from David...</div>
+          </div>
+          <div class="status" id="status">Connecting...</div>
+          <a class="phone" href="/dashboard?token=${safeToken}">Open dashboard</a>
+        </section>
+      </div>
+      <div class="actions">
+        <a class="button" href="/health">Health</a>
+        <a class="button" href="/dashboard?token=${safeToken}">Dashboard</a>
+      </div>
+    </main>
+    <script>
+      const token = ${tokenJson};
+      const qrFrame = document.getElementById('qrFrame');
+      const statusEl = document.getElementById('status');
+
+      async function refreshQr() {
+        try {
+          const response = await fetch('/qr-data?token=' + encodeURIComponent(token), { cache: 'no-store' });
+          const data = await response.json();
+          statusEl.textContent = data.connectionState === 'open'
+            ? 'Connected. You can close this page.'
+            : data.hasQr
+              ? 'Scan this QR with WhatsApp Linked devices.'
+              : 'Waiting for a fresh QR code...';
+
+          if (data.image) {
+            qrFrame.innerHTML = '<img alt="David WhatsApp linking QR" />';
+            qrFrame.querySelector('img').src = data.image;
+          } else if (data.connectionState === 'open') {
+            qrFrame.innerHTML = '<div class="qrEmpty">David is already connected.</div>';
+          } else {
+            qrFrame.innerHTML = '<div class="qrEmpty">Waiting for a QR code from David...</div>';
+          }
+        } catch (error) {
+          statusEl.textContent = 'Could not refresh QR. Reload the page.';
+        }
+      }
+
+      refreshQr();
+      setInterval(refreshQr, 3500);
+    </script>
   </body>
 </html>`);
 }
@@ -400,7 +502,16 @@ export function startServer() {
           sendJson(res, 401, { ok: false, error: 'Unauthorized' });
           return;
         }
-        await sendQrPage(res);
+        await sendQrPage(res, url.searchParams.get('token') || '');
+        return;
+      }
+
+      if (url.pathname === '/qr-data') {
+        if (!isAuthorized(url)) {
+          sendJson(res, 401, { ok: false, error: 'Unauthorized' });
+          return;
+        }
+        await sendQrData(res);
         return;
       }
 
