@@ -9,14 +9,14 @@ let cachedSettings = null;
 
 const defaults = {
   maxReplyChars: 1200,
-  minSecondsBetweenReplies: 25,
-  replyDelayMinSeconds: 15,
-  replyDelayMaxSeconds: 45,
+  minSecondsBetweenReplies: 20,
+  replyDelayMinSeconds: 8,
+  replyDelayMaxSeconds: 20,
   burstSize: 5,
   burstCooldownMinSeconds: 600,
   burstCooldownMaxSeconds: 1200,
-  hourlyReplyLimit: 20,
-  dailyReplyLimit: 80,
+  hourlyReplyLimit: 40,
+  dailyReplyLimit: 120,
 };
 
 function boolEnv(name, fallback = false) {
