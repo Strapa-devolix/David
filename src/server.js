@@ -202,10 +202,13 @@ function dashboardPage(token) {
       :root { color-scheme: dark; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
       body { margin: 0; background: #0d0f12; color: #f6f7fb; }
       main { max-width: 1180px; margin: 0 auto; padding: 28px; }
-      header { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 22px; }
+      header { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin-bottom: 18px; }
       h1 { margin: 0; font-size: 28px; }
       h2 { margin: 0 0 14px; font-size: 18px; }
+      h3 { margin: 0 0 12px; font-size: 14px; color: #d8deea; }
       section { border-top: 1px solid #2a2e36; padding: 22px 0; }
+      details { border-top: 1px solid #2a2e36; padding: 18px 0; }
+      summary { cursor: pointer; color: #f6f7fb; font-weight: 700; margin-bottom: 12px; }
       .liveBar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; border-top: 1px solid #2a2e36; padding: 16px 0 18px; }
       .metric { border: 1px solid #2a2e36; border-radius: 6px; padding: 10px 12px; background: #11151d; }
       .metric span { display: block; color: #99a2b3; font-size: 12px; margin-bottom: 5px; }
@@ -214,21 +217,30 @@ function dashboardPage(token) {
       .dot.open { background: #23d366; }
       .dot.close, .dot.error { background: #f25f5c; }
       .dot.connecting, .dot.starting, .dot.reconnecting { background: #f5b841; }
-      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-      label { display: grid; gap: 8px; color: #c9ced8; font-size: 13px; }
+      .controlGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+      .splitGrid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr); gap: 18px; align-items: start; }
+      .panel { border: 1px solid #2a2e36; border-radius: 8px; padding: 16px; background: #11151d; }
+      .panel + .panel { margin-top: 14px; }
+      label, .field { display: grid; gap: 8px; color: #c9ced8; font-size: 13px; }
       input, select, textarea { width: 100%; box-sizing: border-box; border: 1px solid #343946; background: #151922; color: #f6f7fb; border-radius: 6px; padding: 10px 12px; font: inherit; }
       textarea { min-height: 120px; resize: vertical; }
+      input[type="range"] { padding: 0; height: 28px; accent-color: #23d366; }
       input[type="checkbox"] { width: 18px; height: 18px; }
-      .checks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-      .check { display: flex; align-items: center; gap: 10px; border: 1px solid #2a2e36; border-radius: 6px; padding: 12px; color: #f6f7fb; }
+      .sliderHead { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+      .sliderValue { color: #23d366; font-weight: 700; white-space: nowrap; }
+      .hint { color: #99a2b3; font-size: 12px; line-height: 1.35; }
+      .checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .check { display: flex; align-items: center; gap: 10px; border: 1px solid #2a2e36; border-radius: 6px; padding: 12px; color: #f6f7fb; background: #11151d; }
+      .compactActions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
       button, a.button { border: 1px solid #596170; background: #f6f7fb; color: #0d0f12; border-radius: 6px; padding: 10px 14px; font: inherit; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
       button.secondary, a.secondary { background: transparent; color: #f6f7fb; }
       .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
       .status { color: #99a2b3; font-size: 13px; }
-      .chat { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; border: 1px solid #2a2e36; border-radius: 6px; padding: 12px; margin-bottom: 10px; }
+      .chat { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; border: 1px solid #2a2e36; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #11151d; }
       .chat strong { display: block; margin-bottom: 4px; }
       .chat code { color: #b8c7ff; word-break: break-all; }
-      @media (max-width: 760px) { main { padding: 18px; } .grid, .checks, .liveBar { grid-template-columns: 1fr; } header { align-items: flex-start; flex-direction: column; } }
+      .saveBar { position: sticky; bottom: 0; margin-top: 18px; padding: 14px 0; background: rgba(13, 15, 18, 0.94); border-top: 1px solid #2a2e36; backdrop-filter: blur(8px); }
+      @media (max-width: 860px) { main { padding: 18px; } .controlGrid, .checks, .liveBar, .splitGrid { grid-template-columns: 1fr; } header { align-items: flex-start; flex-direction: column; } }
     </style>
   </head>
   <body>
@@ -252,55 +264,72 @@ function dashboardPage(token) {
       </div>
 
       <section>
-        <h2>Behavior</h2>
-        <div class="grid">
-          <label>Assistant name<input id="botName" /></label>
-          <label>Owner name<input id="ownerName" /></label>
-          <label>Reply trigger
-            <select id="replyTrigger">
-              <option value="question_or_mention">Question or mention</option>
-              <option value="question_only">Question only</option>
-              <option value="mention_only">Mention only</option>
-              <option value="all">All messages</option>
-            </select>
-          </label>
-          <label>AI provider
-            <select id="aiProvider">
-              <option value="groq">Groq</option>
-              <option value="openai">OpenAI</option>
-              <option value="local">Local knowledge only</option>
-            </select>
-          </label>
-          <label>Groq model<input id="groqModel" /></label>
-          <label>OpenAI model<input id="openaiModel" /></label>
-          <label>Transcription model<input id="transcriptionModel" /></label>
-          <label>Transcription language<input id="transcriptionLanguage" placeholder="empty/auto, fr, ar..." /></label>
-          <label>Max reply characters<input id="maxReplyChars" type="number" min="200" max="4000" /></label>
-          <label>Seconds between replies<input id="minSecondsBetweenReplies" type="number" min="0" max="3600" /></label>
-          <label>Reply delay min seconds<input id="replyDelayMinSeconds" type="number" min="0" max="3600" /></label>
-          <label>Reply delay max seconds<input id="replyDelayMaxSeconds" type="number" min="0" max="7200" /></label>
-          <label>Burst size<input id="burstSize" type="number" min="0" max="100" /></label>
-          <label>Burst cooldown min seconds<input id="burstCooldownMinSeconds" type="number" min="0" max="7200" /></label>
-          <label>Burst cooldown max seconds<input id="burstCooldownMaxSeconds" type="number" min="0" max="14400" /></label>
-          <label>Hourly reply limit<input id="hourlyReplyLimit" type="number" min="0" max="1000" /></label>
-          <label>Daily reply limit<input id="dailyReplyLimit" type="number" min="0" max="10000" /></label>
+        <h2>Control Center</h2>
+        <div class="splitGrid">
+          <div class="panel">
+            <h3>Who David Answers As</h3>
+            <div class="controlGrid">
+              <label>Assistant name<input id="botName" /></label>
+              <label>Owner name<input id="ownerName" /></label>
+              <label>Reply mode
+                <select id="replyTrigger">
+                  <option value="mention_only">Only when mentioned</option>
+                  <option value="question_or_mention">Question or mention</option>
+                  <option value="question_only">Questions only</option>
+                  <option value="all">All allowed messages</option>
+                </select>
+              </label>
+              <label>AI provider
+                <select id="aiProvider">
+                  <option value="groq">Groq</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="local">Local knowledge only</option>
+                </select>
+              </label>
+            </div>
+            <div class="checks" style="margin-top: 14px;">
+              <label class="check"><input id="autoReply" type="checkbox" /> Auto reply</label>
+              <label class="check"><input id="onlyGroups" type="checkbox" /> Groups only</label>
+              <label class="check"><input id="allowAllChats" type="checkbox" /> Allow all chats</label>
+              <label class="check"><input id="transcribeAudio" type="checkbox" /> Transcribe audio</label>
+              <label class="check"><input id="safeSendMode" type="checkbox" /> Safe send queue</label>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h3>Reply Pace</h3>
+            <label class="field"><span class="sliderHead"><span>Delay before reply</span><span class="sliderValue" id="replyDelayValue">--</span></span>
+              <input id="replyDelayMinSeconds" type="range" min="0" max="3600" step="10" />
+              <input id="replyDelayMaxSeconds" type="range" min="0" max="7200" step="10" />
+              <span class="hint">David waits between these two values before sending.</span>
+            </label>
+            <label class="field" style="margin-top: 14px;"><span class="sliderHead"><span>Minimum gap per chat</span><span class="sliderValue" data-for="minSecondsBetweenReplies">--</span></span>
+              <input id="minSecondsBetweenReplies" type="range" min="0" max="3600" step="10" />
+            </label>
+            <label class="field" style="margin-top: 14px;"><span class="sliderHead"><span>Reply length</span><span class="sliderValue" data-for="maxReplyChars">--</span></span>
+              <input id="maxReplyChars" type="range" min="200" max="4000" step="50" />
+            </label>
+          </div>
         </div>
-        <div class="checks" style="margin-top: 16px;">
-          <label class="check"><input id="autoReply" type="checkbox" /> Auto reply</label>
-          <label class="check"><input id="onlyGroups" type="checkbox" /> Groups only</label>
-          <label class="check"><input id="allowAllChats" type="checkbox" /> Allow all chats</label>
-          <label class="check"><input id="transcribeAudio" type="checkbox" /> Transcribe audio</label>
-          <label class="check"><input id="safeSendMode" type="checkbox" /> Safe send queue</label>
+      </section>
+
+      <section>
+        <h2>Limits</h2>
+        <div class="controlGrid">
+          <label class="field"><span class="sliderHead"><span>Hourly replies</span><span class="sliderValue" data-for="hourlyReplyLimit">--</span></span>
+            <input id="hourlyReplyLimit" type="range" min="0" max="1000" step="1" />
+          </label>
+          <label class="field"><span class="sliderHead"><span>Daily replies</span><span class="sliderValue" data-for="dailyReplyLimit">--</span></span>
+            <input id="dailyReplyLimit" type="range" min="0" max="10000" step="10" />
+          </label>
         </div>
       </section>
 
       <section>
         <h2>Chats</h2>
-        <div class="grid">
+        <div class="controlGrid">
           <label>Allowed chat IDs<textarea id="allowedChatIds" placeholder="One chat ID per line"></textarea></label>
-          <label>Blocked chat IDs<textarea id="blockedChatIds" placeholder="One chat ID per line"></textarea></label>
           <label>Issue summary chat ID<input id="escalationChatId" placeholder="Internal group or your private chat ID" /></label>
-          <label>Ticket command sender IDs<textarea id="commandSenderIds" placeholder="One sender ID per line. Needed for group escalation chats."></textarea></label>
         </div>
         <div class="actions">
           <button class="secondary" id="refreshChats" type="button">Refresh chats</button>
@@ -308,21 +337,44 @@ function dashboardPage(token) {
         <div id="chats" style="margin-top: 16px;"></div>
       </section>
 
-      <section>
-        <h2>Knowledge</h2>
-        <textarea id="knowledge" style="min-height: 260px;" placeholder="Add platform and app answers here"></textarea>
-      </section>
+      <details>
+        <summary>Advanced Settings</summary>
+        <div class="controlGrid">
+          <label>Groq model<input id="groqModel" /></label>
+          <label>OpenAI model<input id="openaiModel" /></label>
+          <label>Transcription model<input id="transcriptionModel" /></label>
+          <label>Transcription language<input id="transcriptionLanguage" placeholder="empty/auto, fr, ar..." /></label>
+          <label>Blocked chat IDs<textarea id="blockedChatIds" placeholder="One chat ID per line"></textarea></label>
+          <label>Ticket command sender IDs<textarea id="commandSenderIds" placeholder="One sender ID per line. Needed for group escalation chats."></textarea></label>
+        </div>
+        <div class="controlGrid" style="margin-top: 14px;">
+          <label class="field"><span class="sliderHead"><span>Burst size</span><span class="sliderValue" data-for="burstSize">--</span></span>
+            <input id="burstSize" type="range" min="0" max="100" step="1" />
+          </label>
+          <label class="field"><span class="sliderHead"><span>Burst cooldown min</span><span class="sliderValue" data-for="burstCooldownMinSeconds">--</span></span>
+            <input id="burstCooldownMinSeconds" type="range" min="0" max="7200" step="60" />
+          </label>
+          <label class="field"><span class="sliderHead"><span>Burst cooldown max</span><span class="sliderValue" data-for="burstCooldownMaxSeconds">--</span></span>
+            <input id="burstCooldownMaxSeconds" type="range" min="0" max="14400" step="60" />
+          </label>
+        </div>
+      </details>
 
-      <section>
-        <h2>Memory</h2>
+      <details>
+        <summary>Knowledge</summary>
+        <textarea id="knowledge" style="min-height: 260px;" placeholder="Add platform and app answers here"></textarea>
+      </details>
+
+      <details>
+        <summary>Memory</summary>
         <div class="status" id="memoryStats">Loading memory...</div>
         <textarea id="memoryJson" style="min-height: 260px;" spellcheck="false" placeholder="People and chat memory JSON"></textarea>
         <div class="actions">
           <button class="secondary" id="refreshMemory" type="button">Refresh memory</button>
         </div>
-      </section>
+      </details>
 
-      <div class="actions">
+      <div class="saveBar actions">
         <button id="save" type="button">Save dashboard settings</button>
         <span class="status" id="status"></span>
       </div>
@@ -346,6 +398,10 @@ function dashboardPage(token) {
       const chatCountEl = document.getElementById('chatCount');
       const lastUpdateEl = document.getElementById('lastUpdate');
       const memoryStatsEl = document.getElementById('memoryStats');
+      const sliderFields = [
+        'maxReplyChars', 'minSecondsBetweenReplies', 'replyDelayMinSeconds', 'replyDelayMaxSeconds',
+        'burstSize', 'burstCooldownMinSeconds', 'burstCooldownMaxSeconds', 'hourlyReplyLimit', 'dailyReplyLimit'
+      ];
       let isDirty = false;
       let saving = false;
 
@@ -365,6 +421,34 @@ function dashboardPage(token) {
 
       function setStatus(text) {
         statusEl.textContent = text;
+      }
+
+      function formatSeconds(value) {
+        const seconds = Number(value || 0);
+        if (seconds < 60) return seconds + 's';
+        const minutes = Math.round(seconds / 60);
+        if (minutes < 60) return minutes + 'm';
+        const hours = Math.round(minutes / 60);
+        return hours + 'h';
+      }
+
+      function formatSlider(id, value) {
+        if (id.includes('Seconds')) return formatSeconds(value);
+        if (id === 'maxReplyChars') return String(value) + ' chars';
+        if (id === 'hourlyReplyLimit') return String(value) + ' / hour';
+        if (id === 'dailyReplyLimit') return String(value) + ' / day';
+        return String(value);
+      }
+
+      function updateSliderValues() {
+        sliderFields.forEach(function (id) {
+          const field = el[id];
+          if (!field) return;
+          const label = document.querySelector('.sliderValue[data-for="' + id + '"]');
+          if (label) label.textContent = formatSlider(id, field.value);
+        });
+        document.getElementById('replyDelayValue').textContent =
+          formatSeconds(el.replyDelayMinSeconds.value) + ' - ' + formatSeconds(el.replyDelayMaxSeconds.value);
       }
 
       function formatUptime(seconds) {
@@ -416,6 +500,7 @@ function dashboardPage(token) {
         el.commandSenderIds.value = (settings.commandSenderIds || []).join('\\n');
         document.getElementById('secretStatus').textContent =
           'Secrets loaded: ' + secrets.groqKeys + ' Groq key(s), OpenAI ' + (secrets.openai ? 'set' : 'not set');
+        updateSliderValues();
       }
 
       function renderChats(chats) {
@@ -563,12 +648,14 @@ function dashboardPage(token) {
 
       Object.values(el).forEach(function (field) {
         field.addEventListener('input', function () {
+          updateSliderValues();
           if (!saving) {
             isDirty = true;
             setStatus('Unsaved changes');
           }
         });
         field.addEventListener('change', function () {
+          updateSliderValues();
           if (!saving) {
             isDirty = true;
             setStatus('Unsaved changes');
