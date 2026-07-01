@@ -5,7 +5,18 @@ import P from 'pino';
 import qrcodeTerminal from 'qrcode-terminal';
 import { config } from './config.js';
 import { generateReply } from './ai.js';
-import { formatIssueSummary, looksLikeIssue, saveIssue } from './issues.js';
+import {
+  buildIssueContext,
+  findIssue,
+  formatIssueLine,
+  formatIssueSummary,
+  listIssues,
+  looksLikeIssue,
+  parseIssueCommand,
+  saveIssue,
+  statusLabel,
+  updateIssueStatus,
+} from './issues.js';
 import { loadKnowledge } from './knowledge.js';
 import { buildMemoryContext, loadMemory, rememberInteraction } from './memory.js';
 import { loadRegistry, rememberChat } from './registry.js';
@@ -106,14 +117,81 @@ async function ensureDirectories() {
   await fs.mkdir(knowledgeDir, { recursive: true });
 }
 
+function canRunEscalationCommand({ jid, senderJid, settings }) {
+  if (!isGroupJid(jid)) return true;
+  return settings.commandSenderIds.includes(senderJid);
+}
+
+// Owner/admin ticket commands in the escalation chat:
+// /tickets, /ticket ISSUE-XXX, /encours ISSUE-XXX, /regle ISSUE-XXX [note]
+async function handleEscalationCommand(sock, jid, senderJid, text, settings) {
+  const command = parseIssueCommand(text);
+  if (!command) return false;
+
+  if (!canRunEscalationCommand({ jid, senderJid, settings })) {
+    await sock.sendMessage(jid, {
+      text: 'Commande ticket reservee aux IDs autorises. Ajoute ton sender ID dans le dashboard si besoin.',
+    });
+    return true;
+  }
+
+  if (command.action === 'list') {
+    const open = (await listIssues({ limit: 20 })).filter((issue) => issue.status !== 'resolved');
+    const body = open.length
+      ? ['Tickets ouverts:', ...open.map((issue) => `- ${formatIssueLine(issue)}`), '', 'Cloturer: /regle ISSUE-XXX [note]'].join('\n')
+      : 'Aucun ticket ouvert.';
+    await sock.sendMessage(jid, { text: body });
+    return true;
+  }
+
+  if (command.action === 'show') {
+    const issue = await findIssue(command.id);
+    await sock.sendMessage(jid, {
+      text: issue ? formatIssueSummary(issue) : `Ticket ${command.id || ''} introuvable.`,
+    });
+    return true;
+  }
+
+  if (command.action === 'resolve' || command.action === 'progress') {
+    if (!command.id) {
+      await sock.sendMessage(jid, { text: "Donne l'ID. Ex: /regle ISSUE-XXXX [note]" });
+      return true;
+    }
+    const status = command.action === 'resolve' ? 'resolved' : 'in_progress';
+    const issue = await updateIssueStatus(command.id, status, command.note);
+    if (!issue) {
+      await sock.sendMessage(jid, { text: `Ticket ${command.id} introuvable.` });
+      return true;
+    }
+    const who = issue.senderName || issue.chatName || '';
+    const note = issue.resolution ? `\nNote: ${issue.resolution}` : '';
+    await sock.sendMessage(jid, { text: `${issue.id} - ${statusLabel(issue.status)}${who ? ` (${who})` : ''}.${note}` });
+    return true;
+  }
+
+  return false;
+}
+
 async function handleMessage(sock, message) {
   const jid = message.key.remoteJid;
   if (!jid || message.key.fromMe) return;
   const settings = await getSettings();
-  if (!shouldObserveChat(jid, settings)) return;
+  const senderJid = message.key.participant || jid;
 
   let text = getMessageText(message).trim();
   let audioTranscript = false;
+
+  // Ticket commands must work even when the escalation chat is private and onlyGroups is enabled.
+  if (text && settings.escalationChatId && jid === settings.escalationChatId) {
+    try {
+      if (await handleEscalationCommand(sock, jid, senderJid, text, settings)) return;
+    } catch (error) {
+      setLastError(error);
+      logger.error({ err: error, jid }, 'Failed to handle escalation command');
+    }
+  }
+
+  if (!shouldObserveChat(jid, settings)) return;
 
   if (!text && hasAudioMessage(message)) {
     try {
@@ -128,7 +206,6 @@ async function handleMessage(sock, message) {
   if (!text) return;
 
   const isGroup = isGroupJid(jid);
-  const senderJid = message.key.participant || jid;
   const senderName = message.pushName || message.key.participant || 'teammate';
   const chatName = await getChatName(sock, jid, senderName);
   await rememberChat({ jid, name: chatName, type: isGroup ? 'group' : 'direct' });
@@ -161,6 +238,7 @@ async function handleMessage(sock, message) {
       ? await saveIssue({
           chatJid: jid,
           chatName,
+          senderJid,
           senderName,
           text,
           source: audioTranscript ? 'audio' : 'texte',
@@ -173,14 +251,11 @@ async function handleMessage(sock, message) {
       question: text,
       recentContext: historyByChat.get(jid) || [],
       memoryContext: await buildMemoryContext({ senderJid, chatJid: jid }),
+      issuesContext: await buildIssueContext({ chatJid: jid, senderJid }),
       settings,
       issueDetected,
       audioTranscript,
     });
-
-    if (issue && !reply.includes(issue.id)) {
-      reply = `${reply}\n\nReference interne: ${issue.id}`;
-    }
 
     if (!reply) return;
     await enqueueSend({ sock, jid, content: { text: reply }, options: { quoted: message }, settings, logger });

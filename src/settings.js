@@ -78,6 +78,7 @@ function defaultSettings() {
       : 'mention_only',
     allowedChatIds: listEnv('ALLOWED_CHAT_IDS'),
     blockedChatIds: listEnv('BLOCKED_CHAT_IDS'),
+    commandSenderIds: listEnv('COMMAND_SENDER_IDS'),
     maxReplyChars: intEnv('MAX_REPLY_CHARS', defaults.maxReplyChars),
     minSecondsBetweenReplies: intEnv('MIN_SECONDS_BETWEEN_REPLIES', defaults.minSecondsBetweenReplies),
     aiProvider: defaultProvider(),
@@ -113,6 +114,7 @@ function sanitizeSettings(input = {}, base = defaultSettings()) {
   if (replyTriggers.has(input.replyTrigger)) settings.replyTrigger = input.replyTrigger;
   if (Object.hasOwn(input, 'allowedChatIds')) settings.allowedChatIds = normalizeList(input.allowedChatIds);
   if (Object.hasOwn(input, 'blockedChatIds')) settings.blockedChatIds = normalizeList(input.blockedChatIds);
+  if (Object.hasOwn(input, 'commandSenderIds')) settings.commandSenderIds = normalizeList(input.commandSenderIds);
   if (Object.hasOwn(input, 'maxReplyChars')) {
     settings.maxReplyChars = clampNumber(input.maxReplyChars, defaults.maxReplyChars, 200, 4000);
   }

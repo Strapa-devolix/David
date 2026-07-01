@@ -13,6 +13,7 @@ This uses [WhiskeySockets/Baileys](https://github.com/WhiskeySockets/Baileys), w
 - Transcribes WhatsApp voice notes with Groq when audio transcription is enabled.
 - Saves error, bug, and blocker reports as internal issue records.
 - Can forward issue summaries to your private chat or an internal group.
+- Lets you manage internal tickets from the escalation chat with `/tickets`, `/ticket`, `/encours`, and `/regle`.
 - Remembers known people, names, chats, and small recent context in a persistent JSON file.
 - Sends replies through a queue with random delay, hourly/daily caps, and burst cooldown.
 - Uses Groq or OpenAI for AI replies.
@@ -68,12 +69,13 @@ Scan the QR with WhatsApp: Settings -> Linked devices -> Link a device.
 Behavior settings are stored on the persistent disk in `/var/data/data/settings.json` and edited from `/dashboard?token=ADMIN_TOKEN`.
 Knowledge is stored on the persistent disk in `/var/data/data/knowledge.md` and edited from the dashboard.
 People and chat memory is stored on the persistent disk in `/var/data/data/memory.json` and edited from the dashboard.
-Issues are stored on the persistent disk in `/var/data/data/issues.jsonl`.
+Issues are stored on the persistent disk in `/var/data/data/issues.json`. Older `/var/data/data/issues.jsonl` data is imported automatically.
 
 ## Safer Operating Mode
 
 Open the dashboard, keep `Allow all chats` off, refresh observed chats, then allow only the team groups where David should answer.
 Set `Issue summary chat ID` to your private chat or internal support group so bug reports are forwarded to you.
+If the issue summary chat is a group, add your WhatsApp sender ID in `Ticket command sender IDs` before using `/regle` or `/encours`.
 David ships with conservative first-run defaults after a restriction warning: `Reply trigger` = `mention_only`, `Reply delay` = 60-180 seconds, `Hourly reply limit` = 10, and `Daily reply limit` = 40.
 
 ## Notes

@@ -41,6 +41,9 @@ function buildInstructions(knowledge, settings) {
     'Confidentialite stricte: ne donne jamais de PIN, token, cle API, detail technique interne, statut Render/Firebase/SQLite/Azure, statistiques/objectifs d un autre club, ou donnees privees.',
     'Utilise la memoire pour appeler les gens par leur prenom, reconnaitre leur club ou leur role, et eviter de redemander une info deja connue.',
     'Ne revele jamais une note de memoire brute.',
+    'Suivi des tickets: si le contexte liste des tickets encore ouverts pour cette personne, tu peux la relancer ou dire que tu es toujours dessus, mais ne dis jamais que c est regle.',
+    'Si le contexte liste un ticket recemment REGLE pour cette personne, tu peux le lui annoncer naturellement (ex: "au fait ton souci d hier c est regle"). N annonce JAMAIS un ticket comme regle s il n est pas marque regle dans le contexte.',
+    'Ne cite jamais un identifiant de ticket brut (ISSUE-XXXX) a la personne. Parle du probleme avec ses mots.',
     'Utilise seulement la connaissance projet, la memoire et le contexte recent. Si ce n est pas clair, dis que tu vas verifier au lieu d inventer.',
     '',
     'Project knowledge:',
@@ -48,11 +51,12 @@ function buildInstructions(knowledge, settings) {
   ].join('\n');
 }
 
-function buildUserInput({ chatName, senderName, question, recentContext, memoryContext }) {
+function buildUserInput({ chatName, senderName, question, recentContext, memoryContext, issuesContext }) {
   return [
     chatName ? `Chat: ${chatName}` : '',
     senderName ? `Sender: ${senderName}` : '',
     memoryContext ? `Memory context:\n${memoryContext}` : '',
+    issuesContext ? `Tickets context:\n${issuesContext}` : '',
     recentContext?.length ? `Recent context:\n${recentContext.join('\n')}` : '',
     `Question to answer:\n${question}`,
   ]
@@ -123,6 +127,7 @@ export async function generateReply({
   question,
   recentContext,
   memoryContext,
+  issuesContext,
   settings,
   issueDetected = false,
   audioTranscript = false,
@@ -131,8 +136,10 @@ export async function generateReply({
   const { markdown, sections } = await loadKnowledge();
   const input = [
     audioTranscript ? 'The customer message below was transcribed from a WhatsApp voice note.' : '',
-    issueDetected ? 'An issue/error/blocker was detected. Tell the customer the issue has been saved for the dev team.' : '',
-    buildUserInput({ chatName, senderName, question, recentContext, memoryContext }),
+    issueDetected
+      ? 'The message describes an issue/error/blocker. Reply naturally: ask for missing details, say you are checking or seeing it with Omar, and do not mention ticket IDs.'
+      : '',
+    buildUserInput({ chatName, senderName, question, recentContext, memoryContext, issuesContext }),
   ]
     .filter(Boolean)
     .join('\n\n');

@@ -300,6 +300,7 @@ function dashboardPage(token) {
           <label>Allowed chat IDs<textarea id="allowedChatIds" placeholder="One chat ID per line"></textarea></label>
           <label>Blocked chat IDs<textarea id="blockedChatIds" placeholder="One chat ID per line"></textarea></label>
           <label>Issue summary chat ID<input id="escalationChatId" placeholder="Internal group or your private chat ID" /></label>
+          <label>Ticket command sender IDs<textarea id="commandSenderIds" placeholder="One sender ID per line. Needed for group escalation chats."></textarea></label>
         </div>
         <div class="actions">
           <button class="secondary" id="refreshChats" type="button">Refresh chats</button>
@@ -334,7 +335,7 @@ function dashboardPage(token) {
         'replyDelayMinSeconds', 'replyDelayMaxSeconds', 'burstSize', 'burstCooldownMinSeconds',
         'burstCooldownMaxSeconds', 'hourlyReplyLimit', 'dailyReplyLimit', 'autoReply', 'onlyGroups',
         'allowAllChats', 'transcribeAudio', 'safeSendMode', 'allowedChatIds', 'blockedChatIds',
-        'escalationChatId', 'knowledge', 'memoryJson'
+        'escalationChatId', 'commandSenderIds', 'knowledge', 'memoryJson'
       ];
       const el = Object.fromEntries(ids.map(function (id) { return [id, document.getElementById(id)]; }));
       const statusEl = document.getElementById('status');
@@ -412,6 +413,7 @@ function dashboardPage(token) {
         el.allowedChatIds.value = settings.allowedChatIds.join('\\n');
         el.blockedChatIds.value = settings.blockedChatIds.join('\\n');
         el.escalationChatId.value = settings.escalationChatId;
+        el.commandSenderIds.value = (settings.commandSenderIds || []).join('\\n');
         document.getElementById('secretStatus').textContent =
           'Secrets loaded: ' + secrets.groqKeys + ' Groq key(s), OpenAI ' + (secrets.openai ? 'set' : 'not set');
       }
@@ -537,7 +539,8 @@ function dashboardPage(token) {
               safeSendMode: el.safeSendMode.checked,
               allowedChatIds: lines(el.allowedChatIds.value),
               blockedChatIds: lines(el.blockedChatIds.value),
-              escalationChatId: el.escalationChatId.value
+              escalationChatId: el.escalationChatId.value,
+              commandSenderIds: lines(el.commandSenderIds.value)
             })
           });
           await api('/knowledge', {
