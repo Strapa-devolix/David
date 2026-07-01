@@ -63,24 +63,23 @@ function shouldRespondInChat(jid, settings) {
   return settings.allowAllChats || settings.allowedChatIds.includes(jid);
 }
 
-function shouldReply({ text, message, ownJid, settings, issueDetected }) {
+function shouldReply({ text, message, ownJid, settings, issueDetected, mentioned, question }) {
   if (!settings.autoReply) return false;
 
-  const mentionedJids = getMentionedJids(message);
-  const mentioned = mentionedJids.includes(ownJid);
-  const question = looksLikeQuestion(text);
+  const isMentioned = mentioned ?? getMentionedJids(message).includes(ownJid);
+  const isQuestion = question ?? looksLikeQuestion(text);
   if (issueDetected) return true;
 
   switch (settings.replyTrigger) {
     case 'all':
       return true;
     case 'mention_only':
-      return mentioned;
+      return isMentioned;
     case 'question_only':
-      return question;
+      return isQuestion;
     case 'question_or_mention':
     default:
-      return question || mentioned;
+      return isQuestion || isMentioned;
   }
 }
 
@@ -227,7 +226,9 @@ async function handleMessage(sock, message) {
 
   const ownJid = jidNormalizedUser(sock.user?.id || '');
   const issueDetected = looksLikeIssue(text);
-  if (!shouldReply({ text, message, ownJid, settings, issueDetected })) return;
+  const mentioned = getMentionedJids(message).includes(ownJid);
+  const question = looksLikeQuestion(text);
+  if (!shouldReply({ text, message, ownJid, settings, issueDetected, mentioned, question })) return;
   if (rateLimited(jid, settings)) {
     logger.info({ jid }, 'Skipping reply because chat is rate limited');
     return;
@@ -258,7 +259,15 @@ async function handleMessage(sock, message) {
     });
 
     if (!reply) return;
-    await enqueueSend({ sock, jid, content: { text: reply }, options: { quoted: message }, settings, logger });
+    await enqueueSend({
+      sock,
+      jid,
+      content: { text: reply },
+      options: { quoted: message },
+      settings,
+      logger,
+      delayProfile: mentioned || issueDetected || question ? 'fast' : 'normal',
+    });
     lastReplyByChat.set(jid, Date.now());
 
     if (issue && settings.escalationChatId) {

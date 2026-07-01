@@ -12,6 +12,19 @@ Add answers about your platform and apps here.
 Keep answers short, factual, and safe to send to teammates.
 `;
 
+function isStarterKnowledge(markdown) {
+  const text = String(markdown || '').toLowerCase();
+  if (!text.trim()) return true;
+  if (text.includes('# megafit david persona')) return false;
+
+  return (
+    text.includes('# platform knowledge') &&
+    (text.includes('add answers about your platform') ||
+      text.includes('remplace ce fichier depuis le dashboard') ||
+      text.includes('david aide les clients a utiliser notre systeme'))
+  );
+}
+
 function sectionize(markdown) {
   const sections = [];
   let current = { title: 'General', body: [] };
@@ -56,8 +69,8 @@ export async function loadKnowledge({ force = false } = {}) {
 
 async function ensureKnowledgeFile(absolutePath) {
   try {
-    await fs.access(absolutePath);
-    return;
+    const existing = await fs.readFile(absolutePath, 'utf8');
+    if (!isStarterKnowledge(existing)) return;
   } catch {
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
   }

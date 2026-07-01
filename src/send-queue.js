@@ -14,6 +14,18 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function timingSettings(settings, delayProfile) {
+  if (delayProfile !== 'fast') return settings;
+
+  const minDelay = Math.min(Number(settings.replyDelayMinSeconds || 0), 8);
+  const maxDelay = Math.min(Number(settings.replyDelayMaxSeconds || 0), 22);
+  return {
+    ...settings,
+    replyDelayMinSeconds: minDelay,
+    replyDelayMaxSeconds: Math.max(minDelay, maxDelay),
+  };
+}
+
 function statePath() {
   return path.join(config.dataDir, 'send-state.json');
 }
@@ -80,17 +92,19 @@ function assertLimits(state, settings) {
   }
 }
 
-async function sendWithSafety({ sock, jid, content, options, settings, logger }) {
+async function sendWithSafety({ sock, jid, content, options, settings, logger, delayProfile = 'normal' }) {
+  const timing = timingSettings(settings, delayProfile);
   const state = await loadState();
   normalizeState(state);
-  assertLimits(state, settings);
+  assertLimits(state, timing);
 
   const now = Date.now();
   const queuedDelay = Math.max(0, state.nextSendAt - now);
-  const randomDelay = settings.safeSendMode
-    ? randomBetween(settings.replyDelayMinSeconds, settings.replyDelayMaxSeconds) * 1000
+  const effectiveQueuedDelay = delayProfile === 'fast' ? Math.min(queuedDelay, 12_000) : queuedDelay;
+  const randomDelay = timing.safeSendMode
+    ? randomBetween(timing.replyDelayMinSeconds, timing.replyDelayMaxSeconds) * 1000
     : 0;
-  const waitMs = queuedDelay + randomDelay;
+  const waitMs = effectiveQueuedDelay + randomDelay;
 
   if (waitMs > 0) {
     logger?.info?.({ jid, waitMs }, 'Waiting before safe send');
@@ -99,7 +113,7 @@ async function sendWithSafety({ sock, jid, content, options, settings, logger })
 
   try {
     await sock.sendPresenceUpdate('composing', jid);
-    await sleep(settings.safeSendMode ? randomBetween(900, 2400) : 0);
+    await sleep(timing.safeSendMode ? randomBetween(900, 2400) : 0);
   } catch {
     // Presence is best-effort.
   }
@@ -112,9 +126,9 @@ async function sendWithSafety({ sock, jid, content, options, settings, logger })
   state.burstCount += 1;
 
   let cooldownMs = 0;
-  if (settings.safeSendMode && settings.burstSize > 0 && state.burstCount >= settings.burstSize) {
+  if (timing.safeSendMode && timing.burstSize > 0 && state.burstCount >= timing.burstSize) {
     state.burstCount = 0;
-    cooldownMs = randomBetween(settings.burstCooldownMinSeconds, settings.burstCooldownMaxSeconds) * 1000;
+    cooldownMs = randomBetween(timing.burstCooldownMinSeconds, timing.burstCooldownMaxSeconds) * 1000;
   }
 
   state.nextSendAt = Date.now() + cooldownMs;
