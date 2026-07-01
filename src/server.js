@@ -239,6 +239,15 @@ function dashboardPage(token) {
       .chat { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; border: 1px solid #2a2e36; border-radius: 6px; padding: 12px; margin-bottom: 10px; background: #11151d; }
       .chat strong { display: block; margin-bottom: 4px; }
       .chat code { color: #b8c7ff; word-break: break-all; }
+      .chatTop { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+      .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 700; letter-spacing: 0; }
+      .badge.allowed { background: rgba(35, 211, 102, 0.15); color: #5cf28f; border: 1px solid rgba(35, 211, 102, 0.35); }
+      .badge.blocked { background: rgba(242, 95, 92, 0.15); color: #ff8d88; border: 1px solid rgba(242, 95, 92, 0.35); }
+      .badge.watch { background: rgba(185, 194, 208, 0.12); color: #d4dae5; border: 1px solid rgba(185, 194, 208, 0.2); }
+      .badge.notify { background: rgba(244, 184, 65, 0.15); color: #ffd77d; border: 1px solid rgba(244, 184, 65, 0.3); }
+      .chatStateRow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+      .miniState { color: #99a2b3; font-size: 12px; }
+      .chat button.active { background: #23d366; color: #0d0f12; border-color: #23d366; }
       .saveBar { position: sticky; bottom: 0; margin-top: 18px; padding: 14px 0; background: rgba(13, 15, 18, 0.94); border-top: 1px solid #2a2e36; backdrop-filter: blur(8px); }
       @media (max-width: 860px) { main { padding: 18px; } .controlGrid, .checks, .liveBar, .splitGrid { grid-template-columns: 1fr; } header { align-items: flex-start; flex-direction: column; } }
     </style>
@@ -509,18 +518,42 @@ function dashboardPage(token) {
           chatsEl.innerHTML = '<div class="status">No chats observed yet. Send a message in the target group, then refresh.</div>';
           return;
         }
+        const allowedIds = new Set(lines(el.allowedChatIds.value));
+        const blockedIds = new Set(lines(el.blockedChatIds.value));
+        const notifyId = String(el.escalationChatId.value || '').trim();
+        const allowAll = Boolean(el.allowAllChats.checked);
         chats.forEach(function (chat) {
           const row = document.createElement('div');
           row.className = 'chat';
           const info = document.createElement('div');
-          info.innerHTML = '<strong></strong><code></code><div class="status"></div>';
+          info.innerHTML = '<div class="chatTop"><strong></strong><span class="badge"></span></div><code></code><div class="status"></div><div class="chatStateRow"></div>';
           info.querySelector('strong').textContent = chat.name || chat.type || 'Chat';
           info.querySelector('code').textContent = chat.jid;
-          info.querySelector('.status').textContent = (chat.type || 'chat') + ' - last seen ' + (chat.lastSeenAt || '');
+          const stateBadge = info.querySelector('.badge');
+          const stateText = info.querySelector('.status');
+          const stateRow = info.querySelector('.chatStateRow');
+          const isBlocked = blockedIds.has(chat.jid);
+          const isAllowed = allowAll || allowedIds.has(chat.jid);
+          const isNotify = notifyId && notifyId === chat.jid;
+          const stateLabel = isBlocked ? 'Blocked' : isNotify ? 'Notify here' : isAllowed ? 'Allowed' : 'Watch only';
+          const stateClass = isBlocked ? 'blocked' : isNotify ? 'notify' : isAllowed ? 'allowed' : 'watch';
+          row.style.opacity = isBlocked ? '0.7' : '1';
+          row.style.borderColor = isBlocked ? 'rgba(242, 95, 92, 0.35)' : isAllowed ? 'rgba(35, 211, 102, 0.35)' : 'rgba(42, 46, 54, 1)';
+          stateBadge.className = 'badge ' + stateClass;
+          stateBadge.textContent = stateLabel;
+          stateText.textContent = (chat.type || 'chat') + ' - last seen ' + (chat.lastSeenAt || '');
+          const allowState = document.createElement('span');
+          allowState.className = 'miniState';
+          allowState.textContent = isAllowed ? 'Replies allowed' : 'Replies not allowed';
+          const watchState = document.createElement('span');
+          watchState.className = 'miniState';
+          watchState.textContent = isBlocked ? 'Hidden from replies' : isNotify ? 'Receives issue summaries' : 'Available in chat list';
+          stateRow.append(allowState, watchState);
           const button = document.createElement('button');
           button.className = 'secondary';
           button.type = 'button';
-          button.textContent = 'Allow';
+          button.textContent = isAllowed ? 'Allowed' : 'Allow';
+          if (isAllowed) button.classList.add('active');
           button.addEventListener('click', function () {
             const current = new Set(lines(el.allowedChatIds.value));
             current.add(chat.jid);
@@ -530,7 +563,8 @@ function dashboardPage(token) {
           const notifyButton = document.createElement('button');
           notifyButton.className = 'secondary';
           notifyButton.type = 'button';
-          notifyButton.textContent = 'Notify here';
+          notifyButton.textContent = isNotify ? 'Notify here' : 'Notify here';
+          if (isNotify) notifyButton.classList.add('active');
           notifyButton.addEventListener('click', function () {
             el.escalationChatId.value = chat.jid;
             setStatus('Issue summary chat selected. Save settings to apply it.');
