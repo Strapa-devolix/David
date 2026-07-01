@@ -3,6 +3,7 @@ import { URL } from 'node:url';
 import qrcode from 'qrcode';
 import { config, requireAdminToken } from './config.js';
 import { loadKnowledge, saveKnowledge } from './knowledge.js';
+import { getMemoryDashboard, saveMemory } from './memory.js';
 import { getChats } from './registry.js';
 import { getSecretStatus, getSettings, updateSettings } from './settings.js';
 
@@ -311,6 +312,15 @@ function dashboardPage(token) {
         <textarea id="knowledge" style="min-height: 260px;" placeholder="Add platform and app answers here"></textarea>
       </section>
 
+      <section>
+        <h2>Memory</h2>
+        <div class="status" id="memoryStats">Loading memory...</div>
+        <textarea id="memoryJson" style="min-height: 260px;" spellcheck="false" placeholder="People and chat memory JSON"></textarea>
+        <div class="actions">
+          <button class="secondary" id="refreshMemory" type="button">Refresh memory</button>
+        </div>
+      </section>
+
       <div class="actions">
         <button id="save" type="button">Save dashboard settings</button>
         <span class="status" id="status"></span>
@@ -324,7 +334,7 @@ function dashboardPage(token) {
         'replyDelayMinSeconds', 'replyDelayMaxSeconds', 'burstSize', 'burstCooldownMinSeconds',
         'burstCooldownMaxSeconds', 'hourlyReplyLimit', 'dailyReplyLimit', 'autoReply', 'onlyGroups',
         'allowAllChats', 'transcribeAudio', 'safeSendMode', 'allowedChatIds', 'blockedChatIds',
-        'escalationChatId', 'knowledge'
+        'escalationChatId', 'knowledge', 'memoryJson'
       ];
       const el = Object.fromEntries(ids.map(function (id) { return [id, document.getElementById(id)]; }));
       const statusEl = document.getElementById('status');
@@ -334,6 +344,7 @@ function dashboardPage(token) {
       const uptimeEl = document.getElementById('uptime');
       const chatCountEl = document.getElementById('chatCount');
       const lastUpdateEl = document.getElementById('lastUpdate');
+      const memoryStatsEl = document.getElementById('memoryStats');
       let isDirty = false;
       let saving = false;
 
@@ -446,12 +457,24 @@ function dashboardPage(token) {
         });
       }
 
+      function fillMemory(response, updateTextarea) {
+        const stats = response.stats || {};
+        const updated = stats.updatedAt ? ', updated ' + stats.updatedAt : '';
+        memoryStatsEl.textContent =
+          String(stats.people || 0) + ' people, ' + String(stats.chats || 0) + ' chats' + updated;
+        if (updateTextarea !== false) {
+          el.memoryJson.value = JSON.stringify(response.memory || { version: 1, people: {}, chats: {} }, null, 2);
+        }
+      }
+
       async function loadAll() {
         setStatus('Loading...');
         const settingsResponse = await api('/settings');
         const knowledgeResponse = await api('/knowledge');
+        const memoryResponse = await api('/memory');
         fillSettings(settingsResponse.settings, settingsResponse.secrets);
         el.knowledge.value = knowledgeResponse.markdown || '';
+        fillMemory(memoryResponse);
         isDirty = false;
         await refreshLive();
         setStatus('Ready');
@@ -469,11 +492,14 @@ function dashboardPage(token) {
         const healthPromise = fetch('/health', { cache: 'no-store' }).then(function (res) { return res.json(); });
         const chatsPromise = api('/chats');
         const settingsPromise = isDirty ? Promise.resolve(null) : api('/settings');
-        const responses = await Promise.all([healthPromise, chatsPromise, settingsPromise]);
+        const memoryPromise = isDirty ? Promise.resolve(null) : api('/memory');
+        const responses = await Promise.all([healthPromise, chatsPromise, settingsPromise, memoryPromise]);
         const health = responses[0];
         const chats = responses[1].chats || [];
         const settingsResponse = responses[2];
+        const memoryResponse = responses[3];
         if (settingsResponse && !isDirty) fillSettings(settingsResponse.settings, settingsResponse.secrets);
+        if (memoryResponse && !isDirty) fillMemory(memoryResponse);
         renderChats(chats);
         setLiveStatus(health, chats);
       }
@@ -482,6 +508,7 @@ function dashboardPage(token) {
         saving = true;
         setStatus('Saving...');
         try {
+          const memory = JSON.parse(el.memoryJson.value || '{}');
           await api('/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -518,6 +545,11 @@ function dashboardPage(token) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ markdown: el.knowledge.value })
           });
+          await api('/memory', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ memory: memory })
+          });
           setStatus('Saved');
           isDirty = false;
           await refreshLive();
@@ -545,6 +577,14 @@ function dashboardPage(token) {
       });
       document.getElementById('refreshChats').addEventListener('click', function () {
         refreshLive().catch(function (error) { setStatus(error.message); });
+      });
+      document.getElementById('refreshMemory').addEventListener('click', function () {
+        api('/memory')
+          .then(function (response) {
+            fillMemory(response);
+            setStatus('Memory refreshed');
+          })
+          .catch(function (error) { setStatus(error.message); });
       });
       loadAll().catch(function (error) { setStatus(error.message); });
       setInterval(function () {
@@ -628,6 +668,24 @@ export function startServer() {
           const body = await readJson(req);
           const { markdown } = await saveKnowledge(body.markdown || '');
           sendJson(res, 200, { ok: true, markdown });
+          return;
+        }
+      }
+
+      if (url.pathname === '/memory') {
+        if (!isAuthorized(url)) {
+          sendJson(res, 401, { ok: false, error: 'Unauthorized' });
+          return;
+        }
+        if (req.method === 'GET') {
+          sendJson(res, 200, { ok: true, ...(await getMemoryDashboard()) });
+          return;
+        }
+        if (req.method === 'POST') {
+          const body = await readJson(req);
+          const memory = await saveMemory(body.memory || body);
+          const dashboard = await getMemoryDashboard();
+          sendJson(res, 200, { ok: true, memory, stats: dashboard.stats });
           return;
         }
       }

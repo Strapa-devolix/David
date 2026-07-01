@@ -3,6 +3,7 @@ node_modules/
 sessions/
 data/chats.json
 data/issues.jsonl
+data/memory.json
 data/message-log.jsonl
 data/send-state.json
 data/settings.json

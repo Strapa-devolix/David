@@ -13,6 +13,7 @@ This uses [WhiskeySockets/Baileys](https://github.com/WhiskeySockets/Baileys), w
 - Transcribes WhatsApp voice notes with Groq when audio transcription is enabled.
 - Saves error, bug, and blocker reports as internal issue records.
 - Can forward issue summaries to your private chat or an internal group.
+- Remembers known people, names, chats, and small recent context in a persistent JSON file.
 - Sends replies through a queue with random delay, hourly/daily caps, and burst cooldown.
 - Uses Groq or OpenAI for AI replies.
 - Falls back to local answers from `data/knowledge.md` if no AI key is set.
@@ -22,6 +23,7 @@ This uses [WhiskeySockets/Baileys](https://github.com/WhiskeySockets/Baileys), w
   - `GET /dashboard?token=ADMIN_TOKEN`
   - `GET /qr?token=ADMIN_TOKEN`
   - `GET /chats?token=ADMIN_TOKEN`
+  - `GET /memory?token=ADMIN_TOKEN`
 
 ## Local Setup
 
@@ -65,6 +67,7 @@ Scan the QR with WhatsApp: Settings -> Linked devices -> Link a device.
 
 Behavior settings are stored on the persistent disk in `/var/data/data/settings.json` and edited from `/dashboard?token=ADMIN_TOKEN`.
 Knowledge is stored on the persistent disk in `/var/data/data/knowledge.md` and edited from the dashboard.
+People and chat memory is stored on the persistent disk in `/var/data/data/memory.json` and edited from the dashboard.
 Issues are stored on the persistent disk in `/var/data/data/issues.jsonl`.
 
 ## Safer Operating Mode

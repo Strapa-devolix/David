@@ -7,6 +7,7 @@ import { config } from './config.js';
 import { generateReply } from './ai.js';
 import { formatIssueSummary, looksLikeIssue, saveIssue } from './issues.js';
 import { loadKnowledge } from './knowledge.js';
+import { buildMemoryContext, loadMemory, rememberInteraction } from './memory.js';
 import { loadRegistry, rememberChat } from './registry.js';
 import { enqueueSend } from './send-queue.js';
 import { setConnectionState, setLastError, setQr, startServer } from './server.js';
@@ -127,9 +128,19 @@ async function handleMessage(sock, message) {
   if (!text) return;
 
   const isGroup = isGroupJid(jid);
+  const senderJid = message.key.participant || jid;
   const senderName = message.pushName || message.key.participant || 'teammate';
   const chatName = await getChatName(sock, jid, senderName);
   await rememberChat({ jid, name: chatName, type: isGroup ? 'group' : 'direct' });
+  await rememberInteraction({
+    chatJid: jid,
+    chatName,
+    chatType: isGroup ? 'group' : 'direct',
+    senderJid,
+    senderName,
+    text,
+    source: audioTranscript ? 'audio' : 'text',
+  });
   rememberMessage(jid, senderName, text);
 
   if (!shouldRespondInChat(jid, settings)) {
@@ -158,8 +169,10 @@ async function handleMessage(sock, message) {
 
     let reply = await generateReply({
       chatName,
+      senderName,
       question: text,
       recentContext: historyByChat.get(jid) || [],
+      memoryContext: await buildMemoryContext({ senderJid, chatJid: jid }),
       settings,
       issueDetected,
       audioTranscript,
@@ -195,6 +208,7 @@ async function connect() {
   await loadSettings({ force: true });
   await loadRegistry();
   await loadKnowledge({ force: true });
+  await loadMemory({ force: true });
 
   const { state, saveCreds } = await useMultiFileAuthState(config.sessionDir);
   const { version } = await fetchLatestBaileysVersion();
