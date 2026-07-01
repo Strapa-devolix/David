@@ -7,6 +7,18 @@ const replyTriggers = new Set(['all', 'mention_only', 'question_only', 'question
 const aiProviders = new Set(['groq', 'openai', 'local']);
 let cachedSettings = null;
 
+const defaults = {
+  maxReplyChars: 1200,
+  minSecondsBetweenReplies: 60,
+  replyDelayMinSeconds: 60,
+  replyDelayMaxSeconds: 180,
+  burstSize: 3,
+  burstCooldownMinSeconds: 600,
+  burstCooldownMaxSeconds: 1200,
+  hourlyReplyLimit: 10,
+  dailyReplyLimit: 40,
+};
+
 function boolEnv(name, fallback = false) {
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
@@ -63,11 +75,11 @@ function defaultSettings() {
     allowAllChats: boolEnv('ALLOW_ALL_CHATS', false),
     replyTrigger: replyTriggers.has(process.env.REPLY_TRIGGER)
       ? process.env.REPLY_TRIGGER
-      : 'question_or_mention',
+      : 'mention_only',
     allowedChatIds: listEnv('ALLOWED_CHAT_IDS'),
     blockedChatIds: listEnv('BLOCKED_CHAT_IDS'),
-    maxReplyChars: intEnv('MAX_REPLY_CHARS', 1200),
-    minSecondsBetweenReplies: intEnv('MIN_SECONDS_BETWEEN_REPLIES', 15),
+    maxReplyChars: intEnv('MAX_REPLY_CHARS', defaults.maxReplyChars),
+    minSecondsBetweenReplies: intEnv('MIN_SECONDS_BETWEEN_REPLIES', defaults.minSecondsBetweenReplies),
     aiProvider: defaultProvider(),
     groqModel: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
     openaiModel: process.env.OPENAI_MODEL || 'gpt-5.4-mini',
@@ -76,13 +88,13 @@ function defaultSettings() {
     transcriptionLanguage: defaultTranscriptionLanguage(),
     escalationChatId: process.env.ESCALATION_CHAT_ID || '',
     safeSendMode: boolEnv('SAFE_SEND_MODE', true),
-    replyDelayMinSeconds: intEnv('REPLY_DELAY_MIN_SECONDS', 25),
-    replyDelayMaxSeconds: intEnv('REPLY_DELAY_MAX_SECONDS', 90),
-    burstSize: intEnv('BURST_SIZE', 5),
-    burstCooldownMinSeconds: intEnv('BURST_COOLDOWN_MIN_SECONDS', 300),
-    burstCooldownMaxSeconds: intEnv('BURST_COOLDOWN_MAX_SECONDS', 600),
-    hourlyReplyLimit: intEnv('HOURLY_REPLY_LIMIT', 20),
-    dailyReplyLimit: intEnv('DAILY_REPLY_LIMIT', 80),
+    replyDelayMinSeconds: intEnv('REPLY_DELAY_MIN_SECONDS', defaults.replyDelayMinSeconds),
+    replyDelayMaxSeconds: intEnv('REPLY_DELAY_MAX_SECONDS', defaults.replyDelayMaxSeconds),
+    burstSize: intEnv('BURST_SIZE', defaults.burstSize),
+    burstCooldownMinSeconds: intEnv('BURST_COOLDOWN_MIN_SECONDS', defaults.burstCooldownMinSeconds),
+    burstCooldownMaxSeconds: intEnv('BURST_COOLDOWN_MAX_SECONDS', defaults.burstCooldownMaxSeconds),
+    hourlyReplyLimit: intEnv('HOURLY_REPLY_LIMIT', defaults.hourlyReplyLimit),
+    dailyReplyLimit: intEnv('DAILY_REPLY_LIMIT', defaults.dailyReplyLimit),
   };
 }
 
@@ -102,10 +114,15 @@ function sanitizeSettings(input = {}, base = defaultSettings()) {
   if (Object.hasOwn(input, 'allowedChatIds')) settings.allowedChatIds = normalizeList(input.allowedChatIds);
   if (Object.hasOwn(input, 'blockedChatIds')) settings.blockedChatIds = normalizeList(input.blockedChatIds);
   if (Object.hasOwn(input, 'maxReplyChars')) {
-    settings.maxReplyChars = clampNumber(input.maxReplyChars, 1200, 200, 4000);
+    settings.maxReplyChars = clampNumber(input.maxReplyChars, defaults.maxReplyChars, 200, 4000);
   }
   if (Object.hasOwn(input, 'minSecondsBetweenReplies')) {
-    settings.minSecondsBetweenReplies = clampNumber(input.minSecondsBetweenReplies, 15, 0, 3600);
+    settings.minSecondsBetweenReplies = clampNumber(
+      input.minSecondsBetweenReplies,
+      defaults.minSecondsBetweenReplies,
+      0,
+      3600,
+    );
   }
   if (aiProviders.has(input.aiProvider)) settings.aiProvider = input.aiProvider;
   if (Object.hasOwn(input, 'groqModel')) {
@@ -128,29 +145,39 @@ function sanitizeSettings(input = {}, base = defaultSettings()) {
   }
   if (Object.hasOwn(input, 'safeSendMode')) settings.safeSendMode = Boolean(input.safeSendMode);
   if (Object.hasOwn(input, 'replyDelayMinSeconds')) {
-    settings.replyDelayMinSeconds = clampNumber(input.replyDelayMinSeconds, 25, 0, 3600);
+    settings.replyDelayMinSeconds = clampNumber(input.replyDelayMinSeconds, defaults.replyDelayMinSeconds, 0, 3600);
   }
   if (Object.hasOwn(input, 'replyDelayMaxSeconds')) {
-    settings.replyDelayMaxSeconds = clampNumber(input.replyDelayMaxSeconds, 90, 0, 7200);
+    settings.replyDelayMaxSeconds = clampNumber(input.replyDelayMaxSeconds, defaults.replyDelayMaxSeconds, 0, 7200);
   }
   if (settings.replyDelayMaxSeconds < settings.replyDelayMinSeconds) {
     settings.replyDelayMaxSeconds = settings.replyDelayMinSeconds;
   }
-  if (Object.hasOwn(input, 'burstSize')) settings.burstSize = clampNumber(input.burstSize, 5, 0, 100);
+  if (Object.hasOwn(input, 'burstSize')) settings.burstSize = clampNumber(input.burstSize, defaults.burstSize, 0, 100);
   if (Object.hasOwn(input, 'burstCooldownMinSeconds')) {
-    settings.burstCooldownMinSeconds = clampNumber(input.burstCooldownMinSeconds, 300, 0, 7200);
+    settings.burstCooldownMinSeconds = clampNumber(
+      input.burstCooldownMinSeconds,
+      defaults.burstCooldownMinSeconds,
+      0,
+      7200,
+    );
   }
   if (Object.hasOwn(input, 'burstCooldownMaxSeconds')) {
-    settings.burstCooldownMaxSeconds = clampNumber(input.burstCooldownMaxSeconds, 600, 0, 14400);
+    settings.burstCooldownMaxSeconds = clampNumber(
+      input.burstCooldownMaxSeconds,
+      defaults.burstCooldownMaxSeconds,
+      0,
+      14400,
+    );
   }
   if (settings.burstCooldownMaxSeconds < settings.burstCooldownMinSeconds) {
     settings.burstCooldownMaxSeconds = settings.burstCooldownMinSeconds;
   }
   if (Object.hasOwn(input, 'hourlyReplyLimit')) {
-    settings.hourlyReplyLimit = clampNumber(input.hourlyReplyLimit, 20, 0, 1000);
+    settings.hourlyReplyLimit = clampNumber(input.hourlyReplyLimit, defaults.hourlyReplyLimit, 0, 1000);
   }
   if (Object.hasOwn(input, 'dailyReplyLimit')) {
-    settings.dailyReplyLimit = clampNumber(input.dailyReplyLimit, 80, 0, 10000);
+    settings.dailyReplyLimit = clampNumber(input.dailyReplyLimit, defaults.dailyReplyLimit, 0, 10000);
   }
 
   return settings;
