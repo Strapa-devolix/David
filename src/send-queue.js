@@ -17,8 +17,8 @@ function sleep(ms) {
 function timingSettings(settings, delayProfile) {
   if (delayProfile !== 'fast') return settings;
 
-  const minDelay = Math.min(Number(settings.replyDelayMinSeconds || 0), 8);
-  const maxDelay = Math.min(Number(settings.replyDelayMaxSeconds || 0), 22);
+  const minDelay = Math.min(Number(settings.replyDelayMinSeconds || 0), 2);
+  const maxDelay = Math.min(Number(settings.replyDelayMaxSeconds || 0), 8);
   return {
     ...settings,
     replyDelayMinSeconds: minDelay,
@@ -92,6 +92,15 @@ function assertLimits(state, settings) {
   }
 }
 
+async function showComposing(sock, jid, timing) {
+  try {
+    await sock.sendPresenceUpdate('composing', jid);
+    await sleep(timing.safeSendMode ? randomBetween(700, 1500) : 0);
+  } catch {
+    // Presence is best-effort.
+  }
+}
+
 async function sendWithSafety({ sock, jid, content, options, settings, logger, delayProfile = 'normal' }) {
   const timing = timingSettings(settings, delayProfile);
   const state = await loadState();
@@ -100,22 +109,23 @@ async function sendWithSafety({ sock, jid, content, options, settings, logger, d
 
   const now = Date.now();
   const queuedDelay = Math.max(0, state.nextSendAt - now);
-  const effectiveQueuedDelay = delayProfile === 'fast' ? Math.min(queuedDelay, 12_000) : queuedDelay;
+  const effectiveQueuedDelay = delayProfile === 'fast' ? 0 : queuedDelay;
   const randomDelay = timing.safeSendMode
     ? randomBetween(timing.replyDelayMinSeconds, timing.replyDelayMaxSeconds) * 1000
     : 0;
   const waitMs = effectiveQueuedDelay + randomDelay;
+
+  if (delayProfile === 'fast') {
+    await showComposing(sock, jid, timing);
+  }
 
   if (waitMs > 0) {
     logger?.info?.({ jid, waitMs }, 'Waiting before safe send');
     await sleep(waitMs);
   }
 
-  try {
-    await sock.sendPresenceUpdate('composing', jid);
-    await sleep(timing.safeSendMode ? randomBetween(900, 2400) : 0);
-  } catch {
-    // Presence is best-effort.
+  if (delayProfile !== 'fast') {
+    await showComposing(sock, jid, timing);
   }
 
   const result = await sock.sendMessage(jid, content, options);

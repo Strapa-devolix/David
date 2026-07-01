@@ -160,6 +160,24 @@ export async function updateIssueStatus(id, status, resolution = '') {
   return issue;
 }
 
+export async function resolveActiveIssues({ chatJid, senderJid, resolution = '' } = {}) {
+  const store = await loadIssues();
+  const active = Object.values(store.tickets)
+    .filter(activeStatus)
+    .filter((issue) => matchesRequester(issue, { chatJid, senderJid }))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+
+  const now = new Date().toISOString();
+  for (const issue of active.slice(0, 3)) {
+    issue.status = 'resolved';
+    issue.resolution = truncateText(resolution || 'Confirme comme resolu par WhatsApp.', 400);
+    issue.updatedAt = now;
+  }
+
+  if (active.length) await persist();
+  return active.slice(0, 3);
+}
+
 function activeStatus(issue) {
   return issue.status === 'open' || issue.status === 'in_progress';
 }

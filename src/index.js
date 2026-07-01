@@ -13,6 +13,7 @@ import {
   listIssues,
   looksLikeIssue,
   parseIssueCommand,
+  resolveActiveIssues,
   saveIssue,
   statusLabel,
   updateIssueStatus,
@@ -24,7 +25,13 @@ import { enqueueSend } from './send-queue.js';
 import { setConnectionState, setLastError, setQr, startServer } from './server.js';
 import { getSettings, loadSettings } from './settings.js';
 import { hasAudioMessage, transcribeAudioMessage } from './transcription.js';
-import { getMentionedJids, getMessageText, looksLikeQuestion } from './text.js';
+import {
+  getMentionedJids,
+  getMessageText,
+  looksLikeQuestion,
+  looksLikeResolutionAck,
+  looksLikeSimpleGreeting,
+} from './text.js';
 
 const logger = P({ level: process.env.LOG_LEVEL || 'info' });
 const historyByChat = new Map();
@@ -63,10 +70,20 @@ function shouldRespondInChat(jid, settings) {
   return settings.allowAllChats || settings.allowedChatIds.includes(jid);
 }
 
+function escapeRegExp(text) {
+  return String(text || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function textMentionsBot(text, settings) {
+  const botName = String(settings.botName || 'David').trim() || 'David';
+  const pattern = new RegExp(`(^|[\\s@])${escapeRegExp(botName)}\\b`, 'i');
+  return pattern.test(text);
+}
+
 function shouldReply({ text, message, ownJid, settings, issueDetected, mentioned, question }) {
   if (!settings.autoReply) return false;
 
-  const isMentioned = mentioned ?? getMentionedJids(message).includes(ownJid);
+  const isMentioned = mentioned ?? (getMentionedJids(message).includes(ownJid) || textMentionsBot(text, settings));
   const isQuestion = question ?? looksLikeQuestion(text);
   if (issueDetected) return true;
 
@@ -87,6 +104,12 @@ function rememberMessage(jid, senderName, text) {
   const existing = historyByChat.get(jid) || [];
   existing.push(`${senderName || 'Someone'}: ${text}`);
   historyByChat.set(jid, existing.slice(-8));
+}
+
+function closeTopicHistory(jid, senderName) {
+  historyByChat.set(jid, [
+    `${senderName || 'Someone'}: Le sujet precedent est resolu. Ne le relance pas sauf si la personne en reparle.`,
+  ]);
 }
 
 function rateLimited(jid, settings) {
@@ -225,11 +248,26 @@ async function handleMessage(sock, message) {
   }
 
   const ownJid = jidNormalizedUser(sock.user?.id || '');
-  const issueDetected = looksLikeIssue(text);
-  const mentioned = getMentionedJids(message).includes(ownJid);
+  const mentioned = getMentionedJids(message).includes(ownJid) || textMentionsBot(text, settings);
   const question = looksLikeQuestion(text);
+  const simpleGreeting = looksLikeSimpleGreeting(text);
+  const resolutionAck = looksLikeResolutionAck(text);
+  const issueDetected = !resolutionAck && looksLikeIssue(text);
+  if (resolutionAck) {
+    try {
+      await resolveActiveIssues({
+        chatJid: jid,
+        senderJid,
+        resolution: text,
+      });
+      closeTopicHistory(jid, senderName);
+    } catch (error) {
+      setLastError(error);
+      logger.error({ err: error, jid }, 'Failed to close resolved topic');
+    }
+  }
   if (!shouldReply({ text, message, ownJid, settings, issueDetected, mentioned, question })) return;
-  if (rateLimited(jid, settings)) {
+  if (!(mentioned || question || issueDetected) && rateLimited(jid, settings)) {
     logger.info({ jid }, 'Skipping reply because chat is rate limited');
     return;
   }
@@ -246,13 +284,14 @@ async function handleMessage(sock, message) {
         })
       : null;
 
+    const isolateContext = simpleGreeting || resolutionAck;
     let reply = await generateReply({
       chatName,
       senderName,
       question: text,
-      recentContext: historyByChat.get(jid) || [],
-      memoryContext: await buildMemoryContext({ senderJid, chatJid: jid }),
-      issuesContext: await buildIssueContext({ chatJid: jid, senderJid }),
+      recentContext: isolateContext ? [] : historyByChat.get(jid) || [],
+      memoryContext: isolateContext ? '' : await buildMemoryContext({ senderJid, chatJid: jid }),
+      issuesContext: isolateContext ? '' : await buildIssueContext({ chatJid: jid, senderJid }),
       settings,
       issueDetected,
       audioTranscript,
@@ -266,7 +305,7 @@ async function handleMessage(sock, message) {
       options: { quoted: message },
       settings,
       logger,
-      delayProfile: mentioned || issueDetected || question ? 'fast' : 'normal',
+      delayProfile: mentioned || issueDetected || question || simpleGreeting || resolutionAck ? 'fast' : 'normal',
     });
     lastReplyByChat.set(jid, Date.now());
 
