@@ -156,7 +156,6 @@ async function handleMessage(sock, message) {
         })
       : null;
 
-    await sock.sendPresenceUpdate('composing', jid);
     let reply = await generateReply({
       chatName,
       question: text,
@@ -188,8 +187,6 @@ async function handleMessage(sock, message) {
   } catch (error) {
     setLastError(error);
     logger.error({ err: error, jid }, 'Failed to generate or send reply');
-  } finally {
-    await sock.sendPresenceUpdate('paused', jid).catch(() => {});
   }
 }
 
