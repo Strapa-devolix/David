@@ -205,6 +205,14 @@ function dashboardPage(token) {
       h1 { margin: 0; font-size: 28px; }
       h2 { margin: 0 0 14px; font-size: 18px; }
       section { border-top: 1px solid #2a2e36; padding: 22px 0; }
+      .liveBar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; border-top: 1px solid #2a2e36; padding: 16px 0 18px; }
+      .metric { border: 1px solid #2a2e36; border-radius: 6px; padding: 10px 12px; background: #11151d; }
+      .metric span { display: block; color: #99a2b3; font-size: 12px; margin-bottom: 5px; }
+      .metric strong { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+      .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #7b8494; margin-right: 8px; vertical-align: middle; }
+      .dot.open { background: #23d366; }
+      .dot.close, .dot.error { background: #f25f5c; }
+      .dot.connecting, .dot.starting, .dot.reconnecting { background: #f5b841; }
       .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
       label { display: grid; gap: 8px; color: #c9ced8; font-size: 13px; }
       input, select, textarea { width: 100%; box-sizing: border-box; border: 1px solid #343946; background: #151922; color: #f6f7fb; border-radius: 6px; padding: 10px 12px; font: inherit; }
@@ -219,7 +227,7 @@ function dashboardPage(token) {
       .chat { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; border: 1px solid #2a2e36; border-radius: 6px; padding: 12px; margin-bottom: 10px; }
       .chat strong { display: block; margin-bottom: 4px; }
       .chat code { color: #b8c7ff; word-break: break-all; }
-      @media (max-width: 760px) { main { padding: 18px; } .grid, .checks { grid-template-columns: 1fr; } header { align-items: flex-start; flex-direction: column; } }
+      @media (max-width: 760px) { main { padding: 18px; } .grid, .checks, .liveBar { grid-template-columns: 1fr; } header { align-items: flex-start; flex-direction: column; } }
     </style>
   </head>
   <body>
@@ -234,6 +242,13 @@ function dashboardPage(token) {
           <a class="button secondary" href="/health">Health</a>
         </div>
       </header>
+
+      <div class="liveBar">
+        <div class="metric"><span>Connection</span><strong><i class="dot" id="connectionDot"></i><span id="connectionState">Loading</span></strong></div>
+        <div class="metric"><span>Uptime</span><strong id="uptime">--</strong></div>
+        <div class="metric"><span>Observed chats</span><strong id="chatCount">--</strong></div>
+        <div class="metric"><span>Last update</span><strong id="lastUpdate">--</strong></div>
+      </div>
 
       <section>
         <h2>Behavior</h2>
@@ -314,6 +329,13 @@ function dashboardPage(token) {
       const el = Object.fromEntries(ids.map(function (id) { return [id, document.getElementById(id)]; }));
       const statusEl = document.getElementById('status');
       const chatsEl = document.getElementById('chats');
+      const connectionStateEl = document.getElementById('connectionState');
+      const connectionDotEl = document.getElementById('connectionDot');
+      const uptimeEl = document.getElementById('uptime');
+      const chatCountEl = document.getElementById('chatCount');
+      const lastUpdateEl = document.getElementById('lastUpdate');
+      let isDirty = false;
+      let saving = false;
 
       function api(path, options) {
         const separator = path.includes('?') ? '&' : '?';
@@ -331,6 +353,26 @@ function dashboardPage(token) {
 
       function setStatus(text) {
         statusEl.textContent = text;
+      }
+
+      function formatUptime(seconds) {
+        const value = Number(seconds || 0);
+        const hours = Math.floor(value / 3600);
+        const minutes = Math.floor((value % 3600) / 60);
+        const secs = value % 60;
+        if (hours) return hours + 'h ' + minutes + 'm';
+        if (minutes) return minutes + 'm ' + secs + 's';
+        return secs + 's';
+      }
+
+      function setLiveStatus(health, chats) {
+        const state = health.connectionState || 'unknown';
+        connectionStateEl.textContent = state;
+        connectionDotEl.className = 'dot ' + state;
+        uptimeEl.textContent = formatUptime(health.uptimeSeconds);
+        chatCountEl.textContent = String((chats || []).length);
+        lastUpdateEl.textContent = new Date().toLocaleTimeString();
+        if (health.lastError) setStatus('Last error: ' + health.lastError);
       }
 
       function fillSettings(settings, secrets) {
@@ -410,63 +452,104 @@ function dashboardPage(token) {
         const knowledgeResponse = await api('/knowledge');
         fillSettings(settingsResponse.settings, settingsResponse.secrets);
         el.knowledge.value = knowledgeResponse.markdown || '';
-        await refreshChats();
+        isDirty = false;
+        await refreshLive();
         setStatus('Ready');
       }
 
       async function refreshChats() {
         const response = await api('/chats');
         renderChats(response.chats || []);
+        chatCountEl.textContent = String((response.chats || []).length);
+        lastUpdateEl.textContent = new Date().toLocaleTimeString();
+        return response.chats || [];
+      }
+
+      async function refreshLive() {
+        const healthPromise = fetch('/health', { cache: 'no-store' }).then(function (res) { return res.json(); });
+        const chatsPromise = api('/chats');
+        const settingsPromise = isDirty ? Promise.resolve(null) : api('/settings');
+        const responses = await Promise.all([healthPromise, chatsPromise, settingsPromise]);
+        const health = responses[0];
+        const chats = responses[1].chats || [];
+        const settingsResponse = responses[2];
+        if (settingsResponse && !isDirty) fillSettings(settingsResponse.settings, settingsResponse.secrets);
+        renderChats(chats);
+        setLiveStatus(health, chats);
       }
 
       async function saveAll() {
+        saving = true;
         setStatus('Saving...');
-        await api('/settings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            botName: el.botName.value,
-            ownerName: el.ownerName.value,
-            replyTrigger: el.replyTrigger.value,
-            aiProvider: el.aiProvider.value,
-            groqModel: el.groqModel.value,
-            openaiModel: el.openaiModel.value,
-            transcriptionModel: el.transcriptionModel.value,
-            transcriptionLanguage: el.transcriptionLanguage.value,
-            maxReplyChars: el.maxReplyChars.value,
-            minSecondsBetweenReplies: el.minSecondsBetweenReplies.value,
-            replyDelayMinSeconds: el.replyDelayMinSeconds.value,
-            replyDelayMaxSeconds: el.replyDelayMaxSeconds.value,
-            burstSize: el.burstSize.value,
-            burstCooldownMinSeconds: el.burstCooldownMinSeconds.value,
-            burstCooldownMaxSeconds: el.burstCooldownMaxSeconds.value,
-            hourlyReplyLimit: el.hourlyReplyLimit.value,
-            dailyReplyLimit: el.dailyReplyLimit.value,
-            autoReply: el.autoReply.checked,
-            onlyGroups: el.onlyGroups.checked,
-            allowAllChats: el.allowAllChats.checked,
-            transcribeAudio: el.transcribeAudio.checked,
-            safeSendMode: el.safeSendMode.checked,
-            allowedChatIds: lines(el.allowedChatIds.value),
-            blockedChatIds: lines(el.blockedChatIds.value),
-            escalationChatId: el.escalationChatId.value
-          })
-        });
-        await api('/knowledge', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ markdown: el.knowledge.value })
-        });
-        setStatus('Saved');
+        try {
+          await api('/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              botName: el.botName.value,
+              ownerName: el.ownerName.value,
+              replyTrigger: el.replyTrigger.value,
+              aiProvider: el.aiProvider.value,
+              groqModel: el.groqModel.value,
+              openaiModel: el.openaiModel.value,
+              transcriptionModel: el.transcriptionModel.value,
+              transcriptionLanguage: el.transcriptionLanguage.value,
+              maxReplyChars: el.maxReplyChars.value,
+              minSecondsBetweenReplies: el.minSecondsBetweenReplies.value,
+              replyDelayMinSeconds: el.replyDelayMinSeconds.value,
+              replyDelayMaxSeconds: el.replyDelayMaxSeconds.value,
+              burstSize: el.burstSize.value,
+              burstCooldownMinSeconds: el.burstCooldownMinSeconds.value,
+              burstCooldownMaxSeconds: el.burstCooldownMaxSeconds.value,
+              hourlyReplyLimit: el.hourlyReplyLimit.value,
+              dailyReplyLimit: el.dailyReplyLimit.value,
+              autoReply: el.autoReply.checked,
+              onlyGroups: el.onlyGroups.checked,
+              allowAllChats: el.allowAllChats.checked,
+              transcribeAudio: el.transcribeAudio.checked,
+              safeSendMode: el.safeSendMode.checked,
+              allowedChatIds: lines(el.allowedChatIds.value),
+              blockedChatIds: lines(el.blockedChatIds.value),
+              escalationChatId: el.escalationChatId.value
+            })
+          });
+          await api('/knowledge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ markdown: el.knowledge.value })
+          });
+          setStatus('Saved');
+          isDirty = false;
+          await refreshLive();
+        } finally {
+          saving = false;
+        }
       }
 
+      Object.values(el).forEach(function (field) {
+        field.addEventListener('input', function () {
+          if (!saving) {
+            isDirty = true;
+            setStatus('Unsaved changes');
+          }
+        });
+        field.addEventListener('change', function () {
+          if (!saving) {
+            isDirty = true;
+            setStatus('Unsaved changes');
+          }
+        });
+      });
       document.getElementById('save').addEventListener('click', function () {
         saveAll().catch(function (error) { setStatus(error.message); });
       });
       document.getElementById('refreshChats').addEventListener('click', function () {
-        refreshChats().catch(function (error) { setStatus(error.message); });
+        refreshLive().catch(function (error) { setStatus(error.message); });
       });
       loadAll().catch(function (error) { setStatus(error.message); });
+      setInterval(function () {
+        refreshLive().catch(function (error) { setStatus(error.message); });
+      }, 5000);
     </script>
   </body>
 </html>`;
