@@ -248,6 +248,26 @@ function dashboardPage(token) {
       .chatStateRow { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
       .miniState { color: #99a2b3; font-size: 12px; }
       .chat button.active { background: #23d366; color: #0d0f12; border-color: #23d366; }
+      .toast {
+        position: fixed;
+        right: 20px;
+        bottom: 20px;
+        z-index: 50;
+        background: rgba(17, 21, 29, 0.96);
+        border: 1px solid #2a2e36;
+        color: #f6f7fb;
+        padding: 12px 14px;
+        border-radius: 8px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+        max-width: min(320px, calc(100vw - 40px));
+        font-size: 13px;
+        line-height: 1.4;
+        opacity: 0;
+        transform: translateY(8px);
+        pointer-events: none;
+        transition: opacity 160ms ease, transform 160ms ease;
+      }
+      .toast.show { opacity: 1; transform: translateY(0); }
       .saveBar { position: sticky; bottom: 0; margin-top: 18px; padding: 14px 0; background: rgba(13, 15, 18, 0.94); border-top: 1px solid #2a2e36; backdrop-filter: blur(8px); }
       @media (max-width: 860px) { main { padding: 18px; } .controlGrid, .checks, .liveBar, .splitGrid { grid-template-columns: 1fr; } header { align-items: flex-start; flex-direction: column; } }
     </style>
@@ -342,6 +362,7 @@ function dashboardPage(token) {
         </div>
         <div class="actions">
           <button class="secondary" id="refreshChats" type="button">Refresh chats</button>
+          <button class="secondary" id="allowVisibleChats" type="button">Allow visible groups</button>
         </div>
         <div id="chats" style="margin-top: 16px;"></div>
       </section>
@@ -388,6 +409,7 @@ function dashboardPage(token) {
         <span class="status" id="status"></span>
       </div>
     </main>
+    <div id="toast" class="toast" aria-live="polite"></div>
     <script>
       const token = new URLSearchParams(location.search).get('token') || '';
       const ids = [
@@ -400,6 +422,7 @@ function dashboardPage(token) {
       ];
       const el = Object.fromEntries(ids.map(function (id) { return [id, document.getElementById(id)]; }));
       const statusEl = document.getElementById('status');
+      const toastEl = document.getElementById('toast');
       const chatsEl = document.getElementById('chats');
       const connectionStateEl = document.getElementById('connectionState');
       const connectionDotEl = document.getElementById('connectionDot');
@@ -430,6 +453,17 @@ function dashboardPage(token) {
 
       function setStatus(text) {
         statusEl.textContent = text;
+      }
+
+      let toastTimer = null;
+      function showToast(text) {
+        if (!toastEl) return;
+        toastEl.textContent = text;
+        toastEl.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () {
+          toastEl.classList.remove('show');
+        }, 2200);
       }
 
       function formatSeconds(value) {
@@ -514,6 +548,7 @@ function dashboardPage(token) {
 
       function renderChats(chats) {
         chatsEl.innerHTML = '';
+        window.__lastVisibleChats = chats || [];
         if (!chats.length) {
           chatsEl.innerHTML = '<div class="status">No chats observed yet. Send a message in the target group, then refresh.</div>';
           return;
@@ -559,6 +594,7 @@ function dashboardPage(token) {
             current.add(chat.jid);
             el.allowedChatIds.value = Array.from(current).join('\\n');
             setStatus('Chat added. Save settings to apply it.');
+            showToast(chat.name + ' marked as allowed');
           });
           const notifyButton = document.createElement('button');
           notifyButton.className = 'secondary';
@@ -568,6 +604,7 @@ function dashboardPage(token) {
           notifyButton.addEventListener('click', function () {
             el.escalationChatId.value = chat.jid;
             setStatus('Issue summary chat selected. Save settings to apply it.');
+            showToast('Issue summaries will notify here');
           });
           const actions = document.createElement('div');
           actions.className = 'actions';
@@ -622,6 +659,7 @@ function dashboardPage(token) {
         if (settingsResponse && !isDirty) fillSettings(settingsResponse.settings, settingsResponse.secrets);
         if (memoryResponse && !isDirty) fillMemory(memoryResponse);
         renderChats(chats);
+        window.__lastVisibleChats = chats;
         setLiveStatus(health, chats);
       }
 
@@ -701,6 +739,16 @@ function dashboardPage(token) {
       });
       document.getElementById('refreshChats').addEventListener('click', function () {
         refreshLive().catch(function (error) { setStatus(error.message); });
+      });
+      document.getElementById('allowVisibleChats').addEventListener('click', function () {
+        const current = new Set(lines(el.allowedChatIds.value));
+        (window.__lastVisibleChats || []).forEach(function (chat) {
+          if (chat && chat.type === 'group' && !chat.jid.endsWith('@broadcast')) current.add(chat.jid);
+        });
+        el.allowedChatIds.value = Array.from(current).join('\\n');
+        setStatus('Visible groups added. Save settings to apply it.');
+        showToast('Visible groups added to allowed chats');
+        if (!saving) isDirty = true;
       });
       document.getElementById('refreshMemory').addEventListener('click', function () {
         api('/memory')
