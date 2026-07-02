@@ -59,6 +59,31 @@ async function loadState() {
   return normalizeState(stateCache);
 }
 
+export async function getSendStats(settings) {
+  const state = await loadState();
+  normalizeState(state);
+  const hourlyLimit = Number(settings?.hourlyReplyLimit || 0);
+  const dailyLimit = Number(settings?.dailyReplyLimit || 0);
+  const hourlyUsed = Number(state.sentThisHour || 0);
+  const dailyUsed = Number(state.sentToday || 0);
+  const hourlyRemaining = hourlyLimit > 0 ? Math.max(0, hourlyLimit - hourlyUsed) : 0;
+  const dailyRemaining = dailyLimit > 0 ? Math.max(0, dailyLimit - dailyUsed) : 0;
+  return {
+    day: state.day,
+    hour: state.hour,
+    sentToday: dailyUsed,
+    sentThisHour: hourlyUsed,
+    burstCount: Number(state.burstCount || 0),
+    nextSendAt: Number(state.nextSendAt || 0),
+    hourlyLimit,
+    dailyLimit,
+    hourlyRemaining,
+    dailyRemaining,
+    hourlyRatio: hourlyLimit > 0 ? Math.min(1, hourlyUsed / hourlyLimit) : 0,
+    dailyRatio: dailyLimit > 0 ? Math.min(1, dailyUsed / dailyLimit) : 0,
+  };
+}
+
 function normalizeState(state) {
   const currentDay = todayKey();
   const currentHour = hourKey();

@@ -5,6 +5,7 @@ import { config, requireAdminToken } from './config.js';
 import { loadKnowledge, saveKnowledge } from './knowledge.js';
 import { getMemoryDashboard, saveMemory } from './memory.js';
 import { getChats } from './registry.js';
+import { getSendStats } from './send-queue.js';
 import { getSecretStatus, getSettings, updateSettings } from './settings.js';
 import { formatDashboardDecaissement } from './decaissements.js';
 
@@ -220,6 +221,31 @@ function dashboardPage(token) {
       .metric { border: 1px solid #2a2e36; border-radius: 6px; padding: 10px 12px; background: #11151d; }
       .metric span { display: block; color: #99a2b3; font-size: 12px; margin-bottom: 5px; }
       .metric strong { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+      .meterWrap { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 12px; align-items: center; }
+      .meter {
+        --p: 0;
+        width: 94px;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: conic-gradient(#23d366 calc(var(--p) * 1%), #2a2e36 0);
+        display: grid;
+        place-items: center;
+      }
+      .meterInner {
+        width: 68px;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: #11151d;
+        border: 1px solid #2a2e36;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        padding: 6px;
+      }
+      .meterInner strong { font-size: 14px; line-height: 1.05; }
+      .meterInner span { color: #99a2b3; font-size: 11px; margin: 0; }
+      .meterText { display: grid; gap: 6px; }
+      .meterLine { color: #c9ced8; font-size: 13px; }
       .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #7b8494; margin-right: 8px; vertical-align: middle; }
       .dot.open { background: #23d366; }
       .dot.close, .dot.error { background: #f25f5c; }
@@ -295,8 +321,17 @@ function dashboardPage(token) {
       <div class="liveBar">
         <div class="metric"><span>Connection</span><strong><i class="dot" id="connectionDot"></i><span id="connectionState">Loading</span></strong></div>
         <div class="metric"><span>Uptime</span><strong id="uptime">--</strong></div>
+        <div class="metric">
+          <span>Message speed</span>
+          <div class="meterWrap">
+            <div class="meter" id="messageMeter"><div class="meterInner"><strong id="messageMeterValue">0%</strong><span id="messageMeterLabel">safe</span></div></div>
+            <div class="meterText">
+              <div class="meterLine" id="messageMeterLine">0 sent this hour</div>
+              <div class="meterLine" id="messageMeterDaily">0 sent today</div>
+            </div>
+          </div>
+        </div>
         <div class="metric"><span>Observed chats</span><strong id="chatCount">--</strong></div>
-        <div class="metric"><span>Last update</span><strong id="lastUpdate">--</strong></div>
       </div>
 
       <section>
@@ -437,6 +472,11 @@ function dashboardPage(token) {
       const uptimeEl = document.getElementById('uptime');
       const chatCountEl = document.getElementById('chatCount');
       const lastUpdateEl = document.getElementById('lastUpdate');
+      const messageMeterEl = document.getElementById('messageMeter');
+      const messageMeterValueEl = document.getElementById('messageMeterValue');
+      const messageMeterLabelEl = document.getElementById('messageMeterLabel');
+      const messageMeterLineEl = document.getElementById('messageMeterLine');
+      const messageMeterDailyEl = document.getElementById('messageMeterDaily');
       const memoryStatsEl = document.getElementById('memoryStats');
       const sliderFields = [
         'maxReplyChars', 'minSecondsBetweenReplies', 'replyDelayMinSeconds', 'replyDelayMaxSeconds',
@@ -519,6 +559,22 @@ function dashboardPage(token) {
         uptimeEl.textContent = formatUptime(health.uptimeSeconds);
         chatCountEl.textContent = String((chats || []).length);
         lastUpdateEl.textContent = new Date().toLocaleTimeString();
+        const stats = health.sendStats || {};
+        const pressure = Math.max(Math.round((stats.hourlyRatio || 0) * 100), Math.round((stats.dailyRatio || 0) * 100));
+        if (messageMeterEl) messageMeterEl.style.setProperty('--p', String(pressure));
+        if (messageMeterValueEl) messageMeterValueEl.textContent = pressure + '%';
+        if (messageMeterLabelEl) {
+          messageMeterLabelEl.textContent =
+            pressure >= 90 ? 'high' : pressure >= 70 ? 'busy' : pressure >= 40 ? 'active' : 'safe';
+        }
+        if (messageMeterLineEl) {
+          messageMeterLineEl.textContent =
+            String(stats.sentThisHour || 0) + ' / ' + String(stats.hourlyLimit || 0) + ' this hour';
+        }
+        if (messageMeterDailyEl) {
+          messageMeterDailyEl.textContent =
+            String(stats.sentToday || 0) + ' / ' + String(stats.dailyLimit || 0) + ' today';
+        }
         if (health.lastError) setStatus('Last error: ' + health.lastError);
       }
 
@@ -801,12 +857,15 @@ export function startServer() {
       const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
 
       if (url.pathname === '/' || url.pathname === '/health') {
+        const currentSettings = await getSettings();
+        const sendStats = await getSendStats(currentSettings);
         sendJson(res, 200, {
           ok: true,
           service: 'david',
           connectionState,
           uptimeSeconds: Math.round((Date.now() - startedAt.getTime()) / 1000),
           lastError,
+          sendStats,
         });
         return;
       }
