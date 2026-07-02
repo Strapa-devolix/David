@@ -89,6 +89,7 @@ function defaultSettings() {
     transcriptionLanguage: defaultTranscriptionLanguage(),
     escalationChatId: process.env.ESCALATION_CHAT_ID || '',
     decaissementChatId: process.env.DECAISSEMENT_CHAT_ID || '',
+    voiceReplies: boolEnv('VOICE_REPLIES', true),
     safeSendMode: boolEnv('SAFE_SEND_MODE', true),
     replyDelayMinSeconds: intEnv('REPLY_DELAY_MIN_SECONDS', defaults.replyDelayMinSeconds),
     replyDelayMaxSeconds: intEnv('REPLY_DELAY_MAX_SECONDS', defaults.replyDelayMaxSeconds),
@@ -149,6 +150,7 @@ function sanitizeSettings(input = {}, base = defaultSettings()) {
   if (Object.hasOwn(input, 'decaissementChatId')) {
     settings.decaissementChatId = String(input.decaissementChatId || '').trim();
   }
+  if (Object.hasOwn(input, 'voiceReplies')) settings.voiceReplies = Boolean(input.voiceReplies);
   if (Object.hasOwn(input, 'safeSendMode')) settings.safeSendMode = Boolean(input.safeSendMode);
   if (Object.hasOwn(input, 'replyDelayMinSeconds')) {
     settings.replyDelayMinSeconds = clampNumber(input.replyDelayMinSeconds, defaults.replyDelayMinSeconds, 0, 3600);

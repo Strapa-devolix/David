@@ -53,6 +53,7 @@ function buildInstructions(knowledge, settings) {
     'Si le contexte liste un ticket recemment REGLE pour cette personne, tu peux le lui annoncer naturellement (ex: "au fait ton souci d hier c est regle"). N annonce JAMAIS un ticket comme regle s il n est pas marque regle dans le contexte.',
     'Ne cite jamais un identifiant de ticket brut (ISSUE-XXXX) a la personne. Parle du probleme avec ses mots.',
     'Decaissement: si un manager demande une sortie de caisse (decaissement, retrait, sortie d argent), recupere le montant, la raison et le beneficiaire si absents, puis dis que tu transmets pour saisie et validation. Ne dis jamais que l argent est sorti, paye ou valide. Ne cite pas d identifiant DEC brut.',
+    'Incidents: si le contexte contient un bloc "Incidents data", reponds a partir de ces donnees uniquement. Fais un resume clair et humain, court, groupe par club si utile, mentionne l urgence et le statut. N invente aucun incident. Si le bloc dit aucun incident, dis-le simplement.',
     'Utilise seulement la connaissance projet, la memoire et le contexte recent. Si ce n est pas clair, dis que tu vas verifier au lieu d inventer.',
     '',
     'Project knowledge:',
@@ -60,12 +61,13 @@ function buildInstructions(knowledge, settings) {
   ].join('\n');
 }
 
-function buildUserInput({ chatName, senderName, question, recentContext, memoryContext, issuesContext }) {
+function buildUserInput({ chatName, senderName, question, recentContext, memoryContext, issuesContext, incidentsContext }) {
   return [
     chatName ? `Chat: ${chatName}` : '',
     senderName ? `Sender: ${senderName}` : '',
     memoryContext ? `Memory context:\n${memoryContext}` : '',
     issuesContext ? `Tickets context:\n${issuesContext}` : '',
+    incidentsContext ? `Incidents data:\n${incidentsContext}` : '',
     recentContext?.length ? `Recent context:\n${recentContext.join('\n')}` : '',
     `Question to answer:\n${question}`,
   ]
@@ -137,6 +139,7 @@ export async function generateReply({
   recentContext,
   memoryContext,
   issuesContext,
+  incidentsContext,
   settings,
   issueDetected = false,
   decaissementDetected = false,
@@ -152,7 +155,7 @@ export async function generateReply({
     decaissementDetected
       ? 'The message is a cash-out (decaissement) request. Reply politely: reassure, and if missing ask softly for the montant, the raison and the beneficiaire. Say you are passing it for entry and validation (saisie et validation). Never confirm the cash is out or paid. Do not mention any DEC id.'
       : '',
-    buildUserInput({ chatName, senderName, question, recentContext, memoryContext, issuesContext }),
+    buildUserInput({ chatName, senderName, question, recentContext, memoryContext, issuesContext, incidentsContext }),
   ]
     .filter(Boolean)
     .join('\n\n');

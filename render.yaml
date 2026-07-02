@@ -14,6 +14,22 @@ services:
     envVars:
       - key: ADMIN_TOKEN
         sync: false
+      - key: NOTIFY_TOKEN
+        sync: false
+      - key: MEGAFIT_API_URL
+        sync: false
+      - key: MEGAFIT_API_TOKEN
+        sync: false
+      - key: DECAISSEMENT_CHAT_ID
+        sync: false
+      - key: VOICE_REPLIES
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_VOICE_ID
+        sync: false
+      - key: ELEVENLABS_MODEL
+        sync: false
       - key: OPENAI_API_KEY
         sync: false
       - key: GROQ_API_KEY

@@ -29,6 +29,7 @@ import {
   statusLabel as decaissementStatusLabel,
   updateDecaissementStatus,
 } from './decaissements.js';
+import { getIncidentContextForMessage, looksLikeIncidentQuery } from './incidents.js';
 import { loadKnowledge } from './knowledge.js';
 import { buildMemoryContext, loadMemory, rememberInteraction } from './memory.js';
 import { loadRegistry, rememberChat } from './registry.js';
@@ -36,6 +37,7 @@ import { enqueueSend } from './send-queue.js';
 import { setConnectionState, setDecaissementNotifier, setLastError, setQr, startServer } from './server.js';
 import { getSettings, loadSettings } from './settings.js';
 import { hasAudioMessage, transcribeAudioMessage } from './transcription.js';
+import { synthesizeVoiceNote } from './voice.js';
 import {
   getMentionedJids,
   getMessageText,
@@ -316,6 +318,7 @@ async function handleMessage(sock, message) {
   const resolutionAck = looksLikeResolutionAck(text);
   const issueDetected = !resolutionAck && looksLikeIssue(text);
   const decaissementDetected = !resolutionAck && isGroup && looksLikeDecaissement(text);
+  const incidentQuery = !resolutionAck && looksLikeIncidentQuery(text);
   if (resolutionAck) {
     try {
       await resolveActiveIssues({
@@ -329,8 +332,8 @@ async function handleMessage(sock, message) {
       logger.error({ err: error, jid }, 'Failed to close resolved topic');
     }
   }
-  if (!shouldReply({ text, message, ownJid, settings, issueDetected: issueDetected || decaissementDetected, mentioned, question })) return;
-  if (!(mentioned || question || issueDetected || decaissementDetected) && rateLimited(jid, settings)) {
+  if (!shouldReply({ text, message, ownJid, settings, issueDetected: issueDetected || decaissementDetected || incidentQuery, mentioned, question })) return;
+  if (!(mentioned || question || issueDetected || decaissementDetected || incidentQuery) && rateLimited(jid, settings)) {
     logger.info({ jid }, 'Skipping reply because chat is rate limited');
     return;
   }
@@ -359,6 +362,7 @@ async function handleMessage(sock, message) {
       : null;
 
     const isolateContext = simpleGreeting || resolutionAck;
+    const incidentsContext = incidentQuery && !isolateContext ? await getIncidentContextForMessage(text) : '';
     let reply = await generateReply({
       chatName,
       senderName,
@@ -366,6 +370,7 @@ async function handleMessage(sock, message) {
       recentContext: isolateContext ? [] : historyByChat.get(jid) || [],
       memoryContext: isolateContext ? '' : await buildMemoryContext({ senderJid, chatJid: jid }),
       issuesContext: isolateContext ? '' : await buildIssueContext({ chatJid: jid, senderJid }),
+      incidentsContext,
       settings,
       issueDetected,
       decaissementDetected,
@@ -373,10 +378,20 @@ async function handleMessage(sock, message) {
     });
 
     if (!reply) return;
+
+    // Reply with a voice note when the person sent David a voice note (falls back to text).
+    let voiceBuffer = null;
+    if (audioTranscript && settings.voiceReplies) {
+      voiceBuffer = await synthesizeVoiceNote(reply, logger);
+    }
+    const content = voiceBuffer
+      ? { audio: voiceBuffer, mimetype: 'audio/ogg; codecs=opus', ptt: true }
+      : { text: reply };
+
     await enqueueSend({
       sock,
       jid,
-      content: { text: reply },
+      content,
       options: { quoted: message },
       settings,
       logger,
