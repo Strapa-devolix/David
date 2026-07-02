@@ -18,11 +18,22 @@ import {
   statusLabel,
   updateIssueStatus,
 } from './issues.js';
+import {
+  findDecaissement,
+  formatDecaissementAlert,
+  formatDecaissementLine,
+  listDecaissements,
+  looksLikeDecaissement,
+  parseDecaissementCommand,
+  saveDecaissement,
+  statusLabel as decaissementStatusLabel,
+  updateDecaissementStatus,
+} from './decaissements.js';
 import { loadKnowledge } from './knowledge.js';
 import { buildMemoryContext, loadMemory, rememberInteraction } from './memory.js';
 import { loadRegistry, rememberChat } from './registry.js';
 import { enqueueSend } from './send-queue.js';
-import { setConnectionState, setLastError, setQr, startServer } from './server.js';
+import { setConnectionState, setDecaissementNotifier, setLastError, setQr, startServer } from './server.js';
 import { getSettings, loadSettings } from './settings.js';
 import { hasAudioMessage, transcribeAudioMessage } from './transcription.js';
 import {
@@ -194,6 +205,53 @@ async function handleEscalationCommand(sock, jid, senderJid, text, settings) {
   return false;
 }
 
+// Omar handles cash-out requests in the escalation chat:
+// /decs, /dec DEC-XXX, /decsaisi DEC-XXX, /decfait DEC-XXX [note], /decrefus DEC-XXX [note]
+async function handleDecaissementCommand(sock, jid, senderJid, text, settings) {
+  const command = parseDecaissementCommand(text);
+  if (!command) return false;
+
+  if (!canRunEscalationCommand({ jid, senderJid, settings })) {
+    await sock.sendMessage(jid, {
+      text: 'Commande decaissement reservee aux IDs autorises. Ajoute ton sender ID dans le dashboard si besoin.',
+    });
+    return true;
+  }
+
+  if (command.action === 'list') {
+    const open = (await listDecaissements({ limit: 20 })).filter((request) => request.status === 'requested' || request.status === 'entered');
+    const body = open.length
+      ? ['Demandes de decaissement:', ...open.map((request) => `- ${formatDecaissementLine(request)}`), '', 'Traiter: /decfait DEC-XXX [note]'].join('\n')
+      : 'Aucune demande de decaissement en attente.';
+    await sock.sendMessage(jid, { text: body });
+    return true;
+  }
+
+  if (command.action === 'show') {
+    const request = await findDecaissement(command.id);
+    await sock.sendMessage(jid, {
+      text: request ? formatDecaissementAlert(request) : `Demande ${command.id || ''} introuvable.`,
+    });
+    return true;
+  }
+
+  if (!command.id) {
+    await sock.sendMessage(jid, { text: "Donne l'ID. Ex: /decfait DEC-XXXX [note]" });
+    return true;
+  }
+  const request = await updateDecaissementStatus(command.id, command.action, command.note);
+  if (!request) {
+    await sock.sendMessage(jid, { text: `Demande ${command.id} introuvable.` });
+    return true;
+  }
+  const who = request.senderName || request.gymHint || request.chatName || '';
+  const note = request.note ? `\nNote: ${request.note}` : '';
+  await sock.sendMessage(jid, {
+    text: `${request.id} - ${decaissementStatusLabel(request.status)}${who ? ` (${who})` : ''}.${note}`,
+  });
+  return true;
+}
+
 async function handleMessage(sock, message) {
   const jid = message.key.remoteJid;
   if (!jid || message.key.fromMe) return;
@@ -203,10 +261,14 @@ async function handleMessage(sock, message) {
   let text = getMessageText(message).trim();
   let audioTranscript = false;
 
-  // Ticket commands must work even when the escalation chat is private and onlyGroups is enabled.
-  if (text && settings.escalationChatId && jid === settings.escalationChatId) {
+  // Ticket & décaissement commands must work even when the command chat is private and onlyGroups is enabled.
+  const isCommandChat =
+    (settings.escalationChatId && jid === settings.escalationChatId) ||
+    (settings.decaissementChatId && jid === settings.decaissementChatId);
+  if (text && isCommandChat) {
     try {
       if (await handleEscalationCommand(sock, jid, senderJid, text, settings)) return;
+      if (await handleDecaissementCommand(sock, jid, senderJid, text, settings)) return;
     } catch (error) {
       setLastError(error);
       logger.error({ err: error, jid }, 'Failed to handle escalation command');
@@ -253,6 +315,7 @@ async function handleMessage(sock, message) {
   const simpleGreeting = looksLikeSimpleGreeting(text);
   const resolutionAck = looksLikeResolutionAck(text);
   const issueDetected = !resolutionAck && looksLikeIssue(text);
+  const decaissementDetected = !resolutionAck && isGroup && looksLikeDecaissement(text);
   if (resolutionAck) {
     try {
       await resolveActiveIssues({
@@ -266,8 +329,8 @@ async function handleMessage(sock, message) {
       logger.error({ err: error, jid }, 'Failed to close resolved topic');
     }
   }
-  if (!shouldReply({ text, message, ownJid, settings, issueDetected, mentioned, question })) return;
-  if (!(mentioned || question || issueDetected) && rateLimited(jid, settings)) {
+  if (!shouldReply({ text, message, ownJid, settings, issueDetected: issueDetected || decaissementDetected, mentioned, question })) return;
+  if (!(mentioned || question || issueDetected || decaissementDetected) && rateLimited(jid, settings)) {
     logger.info({ jid }, 'Skipping reply because chat is rate limited');
     return;
   }
@@ -275,6 +338,17 @@ async function handleMessage(sock, message) {
   try {
     const issue = issueDetected
       ? await saveIssue({
+          chatJid: jid,
+          chatName,
+          senderJid,
+          senderName,
+          text,
+          source: audioTranscript ? 'audio' : 'texte',
+        })
+      : null;
+
+    const decaissement = decaissementDetected
+      ? await saveDecaissement({
           chatJid: jid,
           chatName,
           senderJid,
@@ -294,6 +368,7 @@ async function handleMessage(sock, message) {
       issuesContext: isolateContext ? '' : await buildIssueContext({ chatJid: jid, senderJid }),
       settings,
       issueDetected,
+      decaissementDetected,
       audioTranscript,
     });
 
@@ -316,6 +391,18 @@ async function handleMessage(sock, message) {
         content: { text: formatIssueSummary(issue) },
         settings,
         logger,
+      });
+    }
+
+    const decaissementChat = settings.decaissementChatId || settings.escalationChatId;
+    if (decaissement && decaissementChat) {
+      await enqueueSend({
+        sock,
+        jid: decaissementChat,
+        content: { text: formatDecaissementAlert(decaissement) },
+        settings,
+        logger,
+        delayProfile: 'fast',
       });
     }
 
@@ -346,6 +433,15 @@ async function connect() {
   });
 
   sock.ev.on('creds.update', saveCreds);
+
+  // Let the HTTP server push dashboard décaissements to the selected WhatsApp group.
+  setDecaissementNotifier(async (text) => {
+    const currentSettings = await getSettings();
+    const target = currentSettings.decaissementChatId || currentSettings.escalationChatId;
+    if (!target) throw new Error('No décaissement/escalation group configured');
+    await enqueueSend({ sock, jid: target, content: { text }, settings: currentSettings, logger, delayProfile: 'fast' });
+    return target;
+  });
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect, qr } = update;

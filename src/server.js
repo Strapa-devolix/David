@@ -6,6 +6,13 @@ import { loadKnowledge, saveKnowledge } from './knowledge.js';
 import { getMemoryDashboard, saveMemory } from './memory.js';
 import { getChats } from './registry.js';
 import { getSecretStatus, getSettings, updateSettings } from './settings.js';
+import { formatDashboardDecaissement } from './decaissements.js';
+
+// Registered by index.js once WhatsApp is connected: (text) => Promise<jid>.
+let decaissementNotifier = null;
+export function setDecaissementNotifier(fn) {
+  decaissementNotifier = fn;
+}
 
 let currentQr = '';
 let connectionState = 'starting';
@@ -359,6 +366,7 @@ function dashboardPage(token) {
         <div class="controlGrid">
           <label>Allowed chat IDs<textarea id="allowedChatIds" placeholder="One chat ID per line"></textarea></label>
           <label>Issue summary chat ID<input id="escalationChatId" placeholder="Internal group or your private chat ID" /></label>
+          <label>Décaissement group ID<input id="decaissementChatId" placeholder="Group where cash-out requests are posted" /></label>
         </div>
         <div class="actions">
           <button class="secondary" id="refreshChats" type="button">Refresh chats</button>
@@ -418,7 +426,7 @@ function dashboardPage(token) {
         'replyDelayMinSeconds', 'replyDelayMaxSeconds', 'burstSize', 'burstCooldownMinSeconds',
         'burstCooldownMaxSeconds', 'hourlyReplyLimit', 'dailyReplyLimit', 'autoReply', 'onlyGroups',
         'allowAllChats', 'transcribeAudio', 'safeSendMode', 'allowedChatIds', 'blockedChatIds',
-        'escalationChatId', 'commandSenderIds', 'knowledge', 'memoryJson'
+        'escalationChatId', 'decaissementChatId', 'commandSenderIds', 'knowledge', 'memoryJson'
       ];
       const el = Object.fromEntries(ids.map(function (id) { return [id, document.getElementById(id)]; }));
       const statusEl = document.getElementById('status');
@@ -540,6 +548,7 @@ function dashboardPage(token) {
         el.allowedChatIds.value = settings.allowedChatIds.join('\\n');
         el.blockedChatIds.value = settings.blockedChatIds.join('\\n');
         el.escalationChatId.value = settings.escalationChatId;
+        el.decaissementChatId.value = settings.decaissementChatId || '';
         el.commandSenderIds.value = (settings.commandSenderIds || []).join('\\n');
         document.getElementById('secretStatus').textContent =
           'Secrets loaded: ' + secrets.groqKeys + ' Groq key(s), OpenAI ' + (secrets.openai ? 'set' : 'not set');
@@ -606,10 +615,22 @@ function dashboardPage(token) {
             setStatus('Issue summary chat selected. Save settings to apply it.');
             showToast('Issue summaries will notify here');
           });
+          const decId = String(el.decaissementChatId.value || '').trim();
+          const isDec = decId && decId === chat.jid;
+          const decButton = document.createElement('button');
+          decButton.className = 'secondary';
+          decButton.type = 'button';
+          decButton.textContent = 'Décaissement here';
+          if (isDec) decButton.classList.add('active');
+          decButton.addEventListener('click', function () {
+            el.decaissementChatId.value = chat.jid;
+            setStatus('Décaissement group selected. Save settings to apply it.');
+            showToast('Cash-out requests will post here');
+          });
           const actions = document.createElement('div');
           actions.className = 'actions';
           actions.style.marginTop = '0';
-          actions.append(button, notifyButton);
+          actions.append(button, notifyButton, decButton);
           row.append(info, actions);
           chatsEl.append(row);
         });
@@ -697,6 +718,7 @@ function dashboardPage(token) {
               allowedChatIds: lines(el.allowedChatIds.value),
               blockedChatIds: lines(el.blockedChatIds.value),
               escalationChatId: el.escalationChatId.value,
+              decaissementChatId: el.decaissementChatId.value,
               commandSenderIds: lines(el.commandSenderIds.value)
             })
           });
@@ -868,6 +890,34 @@ export function startServer() {
           return;
         }
         sendJson(res, 200, { ok: true, chats: getChats() });
+        return;
+      }
+
+      // Server-to-server: megafit-api posts here when a décaissement happens in the dashboard.
+      if (url.pathname === '/notify/decaissement') {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { ok: false, error: 'Method not allowed' });
+          return;
+        }
+        if (!config.notifyToken) {
+          sendJson(res, 503, { ok: false, error: 'Notify integration disabled (set NOTIFY_TOKEN)' });
+          return;
+        }
+        if (String(req.headers['x-notify-token'] || '') !== config.notifyToken) {
+          sendJson(res, 401, { ok: false, error: 'Unauthorized' });
+          return;
+        }
+        if (typeof decaissementNotifier !== 'function') {
+          sendJson(res, 503, { ok: false, error: 'WhatsApp not connected yet' });
+          return;
+        }
+        const body = await readJson(req);
+        try {
+          const sentTo = await decaissementNotifier(formatDashboardDecaissement(body));
+          sendJson(res, 200, { ok: true, sentTo });
+        } catch (error) {
+          sendJson(res, 502, { ok: false, error: String(error.message || error) });
+        }
         return;
       }
 

@@ -36,6 +36,7 @@ const dataDir = process.env.DATA_DIR || defaultDataDir;
 export const config = {
   port: intEnv('PORT', 3000),
   adminToken: process.env.ADMIN_TOKEN || '',
+  notifyToken: process.env.NOTIFY_TOKEN || '',
   sessionDir: process.env.SESSION_DIR || defaultSessionDir,
   dataDir,
   knowledgePath: process.env.KNOWLEDGE_PATH || path.join(dataDir, 'knowledge.md'),

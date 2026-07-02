@@ -4,6 +4,7 @@ sessions/
 data/chats.json
 data/issues.jsonl
 data/issues.json
+data/decaissements.json
 data/memory.json
 data/message-log.jsonl
 data/send-state.json

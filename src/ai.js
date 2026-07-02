@@ -52,6 +52,7 @@ function buildInstructions(knowledge, settings) {
     'Suivi des tickets: si le contexte liste des tickets encore ouverts pour cette personne, tu peux la relancer ou dire que tu es toujours dessus, mais ne dis jamais que c est regle.',
     'Si le contexte liste un ticket recemment REGLE pour cette personne, tu peux le lui annoncer naturellement (ex: "au fait ton souci d hier c est regle"). N annonce JAMAIS un ticket comme regle s il n est pas marque regle dans le contexte.',
     'Ne cite jamais un identifiant de ticket brut (ISSUE-XXXX) a la personne. Parle du probleme avec ses mots.',
+    'Decaissement: si un manager demande une sortie de caisse (decaissement, retrait, sortie d argent), recupere le montant, la raison et le beneficiaire si absents, puis dis que tu transmets pour saisie et validation. Ne dis jamais que l argent est sorti, paye ou valide. Ne cite pas d identifiant DEC brut.',
     'Utilise seulement la connaissance projet, la memoire et le contexte recent. Si ce n est pas clair, dis que tu vas verifier au lieu d inventer.',
     '',
     'Project knowledge:',
@@ -138,6 +139,7 @@ export async function generateReply({
   issuesContext,
   settings,
   issueDetected = false,
+  decaissementDetected = false,
   audioTranscript = false,
 }) {
   const runtimeSettings = settings || (await getSettings());
@@ -146,6 +148,9 @@ export async function generateReply({
     audioTranscript ? 'The customer message below was transcribed from a WhatsApp voice note.' : '',
     issueDetected
       ? 'The message describes an issue/error/blocker. Reply politely and naturally: reassure first, ask for missing details softly, say you are checking or seeing it with Omar, avoid accusatory wording, and do not mention ticket IDs.'
+      : '',
+    decaissementDetected
+      ? 'The message is a cash-out (decaissement) request. Reply politely: reassure, and if missing ask softly for the montant, the raison and the beneficiaire. Say you are passing it for entry and validation (saisie et validation). Never confirm the cash is out or paid. Do not mention any DEC id.'
       : '',
     buildUserInput({ chatName, senderName, question, recentContext, memoryContext, issuesContext }),
   ]
