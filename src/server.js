@@ -230,6 +230,7 @@ function dashboardPage(token) {
         background: conic-gradient(#23d366 calc(var(--p) * 1%), #2a2e36 0);
         display: grid;
         place-items: center;
+        transition: background 220ms linear, transform 220ms ease;
       }
       .meterInner {
         width: 68px;
@@ -246,6 +247,11 @@ function dashboardPage(token) {
       .meterInner span { color: #99a2b3; font-size: 11px; margin: 0; }
       .meterText { display: grid; gap: 6px; }
       .meterLine { color: #c9ced8; font-size: 13px; }
+      .meterPulse { animation: meterPulse 2.2s ease-in-out infinite; }
+      @keyframes meterPulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.02); }
+      }
       .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #7b8494; margin-right: 8px; vertical-align: middle; }
       .dot.open { background: #23d366; }
       .dot.close, .dot.error { background: #f25f5c; }
@@ -328,6 +334,7 @@ function dashboardPage(token) {
             <div class="meterText">
               <div class="meterLine" id="messageMeterLine">0 sent this hour</div>
               <div class="meterLine" id="messageMeterDaily">0 sent today</div>
+              <div class="meterLine" id="messageMeterNext">No pending cooldown</div>
             </div>
           </div>
         </div>
@@ -477,6 +484,7 @@ function dashboardPage(token) {
       const messageMeterLabelEl = document.getElementById('messageMeterLabel');
       const messageMeterLineEl = document.getElementById('messageMeterLine');
       const messageMeterDailyEl = document.getElementById('messageMeterDaily');
+      const messageMeterNextEl = document.getElementById('messageMeterNext');
       const memoryStatsEl = document.getElementById('memoryStats');
       const sliderFields = [
         'maxReplyChars', 'minSecondsBetweenReplies', 'replyDelayMinSeconds', 'replyDelayMaxSeconds',
@@ -484,6 +492,7 @@ function dashboardPage(token) {
       ];
       let isDirty = false;
       let saving = false;
+      let lastSendStats = null;
 
       function api(path, options) {
         const separator = path.includes('?') ? '&' : '?';
@@ -560,8 +569,10 @@ function dashboardPage(token) {
         chatCountEl.textContent = String((chats || []).length);
         lastUpdateEl.textContent = new Date().toLocaleTimeString();
         const stats = health.sendStats || {};
+        lastSendStats = stats;
         const pressure = Math.max(Math.round((stats.hourlyRatio || 0) * 100), Math.round((stats.dailyRatio || 0) * 100));
         if (messageMeterEl) messageMeterEl.style.setProperty('--p', String(pressure));
+        if (messageMeterEl) messageMeterEl.classList.toggle('meterPulse', pressure > 0 || Boolean(stats.nextSendAt));
         if (messageMeterValueEl) messageMeterValueEl.textContent = pressure + '%';
         if (messageMeterLabelEl) {
           messageMeterLabelEl.textContent =
@@ -575,7 +586,27 @@ function dashboardPage(token) {
           messageMeterDailyEl.textContent =
             String(stats.sentToday || 0) + ' / ' + String(stats.dailyLimit || 0) + ' today';
         }
-        if (health.lastError) setStatus('Last error: ' + health.lastError);
+      }
+
+      function updateMeterCountdown() {
+        if (!messageMeterNextEl || !lastSendStats) return;
+        const nextSendAt = Number(lastSendStats.nextSendAt || 0);
+        if (!nextSendAt) {
+          messageMeterNextEl.textContent = 'No pending cooldown';
+          return;
+        }
+        const remaining = Math.max(0, Math.ceil((nextSendAt - Date.now()) / 1000));
+        if (remaining <= 0) {
+          messageMeterNextEl.textContent = 'Ready to send';
+          return;
+        }
+        if (remaining < 60) {
+          messageMeterNextEl.textContent = 'Next send in ' + remaining + 's';
+          return;
+        }
+        const minutes = Math.floor(remaining / 60);
+        const seconds = remaining % 60;
+        messageMeterNextEl.textContent = 'Next send in ' + minutes + 'm ' + seconds + 's';
       }
 
       function fillSettings(settings, secrets) {
@@ -846,6 +877,7 @@ function dashboardPage(token) {
       setInterval(function () {
         refreshLive().catch(function (error) { setStatus(error.message); });
       }, 5000);
+      setInterval(updateMeterCountdown, 1000);
     </script>
   </body>
 </html>`;
