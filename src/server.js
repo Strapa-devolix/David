@@ -596,14 +596,20 @@ function dashboardPage(token) {
           const button = document.createElement('button');
           button.className = 'secondary';
           button.type = 'button';
-          button.textContent = isAllowed ? 'Allowed' : 'Allow';
+          button.textContent = isAllowed ? 'Uncheck' : 'Allow';
           if (isAllowed) button.classList.add('active');
           button.addEventListener('click', function () {
             const current = new Set(lines(el.allowedChatIds.value));
-            current.add(chat.jid);
+            if (current.has(chat.jid)) {
+              current.delete(chat.jid);
+            } else {
+              current.add(chat.jid);
+            }
             el.allowedChatIds.value = Array.from(current).join('\\n');
-            setStatus('Chat added. Save settings to apply it.');
-            showToast(chat.name + ' marked as allowed');
+            const nowAllowed = current.has(chat.jid);
+            setStatus(nowAllowed ? 'Chat added. Save settings to apply it.' : 'Chat removed. Save settings to apply it.');
+            showToast(chat.name + (nowAllowed ? ' marked as allowed' : ' removed from allowed chats'));
+            renderChats(window.__lastVisibleChats || []);
           });
           const notifyButton = document.createElement('button');
           notifyButton.className = 'secondary';
